@@ -1,4 +1,4 @@
-// Vercel Serverless Function: import Bundesliga and 2. Bundesliga from OpenLigaDB.
+// Vercel Serverless Function: import Bundesliga, 2. Bundesliga and DFB-Pokal from OpenLigaDB.
 // Required Vercel secrets: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, and SPORTVYN_CRON_SECRET or CRON_SECRET.
 // Never expose the service-role key in client-side code.
 module.exports = async function handler(req, res) {
@@ -13,7 +13,7 @@ module.exports = async function handler(req, res) {
     const now = new Date();
     const year = now.getUTCFullYear();
     const season = now.getUTCMonth() >= 6 ? year : year - 1;
-    const leagues=[{code:'bl1',name:'Bundesliga'},{code:'bl2',name:'2. Bundesliga'}];
+    const leagues=[{code:'bl1',name:'Bundesliga'},{code:'bl2',name:'2. Bundesliga'},{code:'dfb',name:'DFB-Pokal'}];
     const results=[];
     const endpoint=base+'/rest/v1/sportvyn_matches?on_conflict=provider,provider_match_id';
     const headers={apikey:key,Authorization:'Bearer '+key,'Content-Type':'application/json',Prefer:'resolution=merge-duplicates,return=minimal'};
@@ -38,8 +38,9 @@ module.exports = async function handler(req, res) {
           away_team:m.team2.teamName,
           starts_at:new Date(m.matchDateTimeUTC).toISOString(),
           status:final?'finished':'scheduled',
-          home_score:final && end && Number.isInteger(end.pointsTeam1)?end.pointsTeam1:null,
-          away_score:final && end && Number.isInteger(end.pointsTeam2)?end.pointsTeam2:null
+          // Cup final scores can include extra time: do not label them as 90-minute results.
+          home_score:league.code!=='dfb' && final && end && Number.isInteger(end.pointsTeam1)?end.pointsTeam1:null,
+          away_score:league.code!=='dfb' && final && end && Number.isInteger(end.pointsTeam2)?end.pointsTeam2:null
         };
       });
     let count=0;
