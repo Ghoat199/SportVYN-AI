@@ -22,3 +22,9 @@ Production importer and daily model cron remain unchanged until the initial sche
 - open-matchday: third-party daily CSV dataset claims Serie A and Ligue 1; verify source, licensing, timestamp, reliability and 90-minute score semantics before use. https://github.com/oladeeayo/open-matchday
 
 Do not consume BetValue AI's already saturated football-data.org free-tier quota. Do not activate unvalidated sources in the production cron.
+
+## 2026-10-28 licensing correction (important)
+
+Football-data.co.uk explicitly limits free CSV use to private/personal or academic purposes and says commercial or AI/model-training use is NOT permitted without a subscription/permission. This restriction cannot safely be bypassed by using a GitHub/DataHub mirror that declares a public-domain license. Do NOT integrate football-data.co.uk or mirrors derived from it into SportVYN AI's public/commercial model pipeline without appropriate rights. Source: https://www.football-data.co.uk/contact.php
+
+The current OpenFootball 2026/27 Serie A and Ligue 1 diagnostic returned last completed result on 2026-09-20 for both competitions as of 2026-10-28; insufficient freshness for predictions. Keep them inactive. Seek independently licensed fresh scores/fixtures and verify commercial and model-training rights before importing.
