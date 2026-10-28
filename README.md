@@ -19,3 +19,7 @@ Nach dem Speichern der Variablen in Vercel ein neues Deployment auslösen.
 Der Import-Endpunkt akzeptiert nur GET mit `Authorization: Bearer <CRON_SECRET>`. Ein normaler Browseraufruf ohne Token liefert absichtlich 401. Der Endpunkt holt die laufende Bundesliga-Saison von OpenLigaDB und schreibt bis zu ca. 306 Spiele per Upsert in `sportvyn_matches`. Für einen automatischen täglichen Aufruf kann ein Vercel-Cron-Eintrag in `vercel.json` verwendet werden, sobald die Secrets konfiguriert sind.
 
 Der Import erstellt **keine** Wett-Tipps, und die öffentliche Website zeigt nur veröffentlichte Analysen. OpenLigaDB liefert keine Buchmacherquoten.
+
+## Deployment
+
+GitHub-Push auf `main` löst bei korrekt verbundener Vercel-Git-Integration ein neues Deployment aus.
