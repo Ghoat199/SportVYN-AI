@@ -2,7 +2,7 @@
 // GET /api/analyze-football (public preview, read-only; no tips are published).
 module.exports = async function handler(req,res){
  if(req.method!=='GET')return res.status(405).json({error:'method_not_allowed'});
- const base=(process.env.SUPABASE_URL||'').replace(/\/+$/,'').replace(/\/rest\\/v1$/,'');
+ const base=(process.env.SUPABASE_URL||'').replace(/\/+$/,'').replace(/\/rest\/v1$/,'');
  const key=process.env.SUPABASE_SERVICE_ROLE_KEY;
  if(!base||!key)return res.status(503).json({error:'missing_supabase_configuration'});
  try{
