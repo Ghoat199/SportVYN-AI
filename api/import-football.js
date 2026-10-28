@@ -1,10 +1,10 @@
 // Vercel Serverless Function: import Bundesliga matches from OpenLigaDB.
-// Required Vercel secrets: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, CRON_SECRET.
+// Required Vercel secrets: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, and SPORTVYN_CRON_SECRET or CRON_SECRET.
 // Never expose the service-role key in client-side code.
 module.exports = async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({error:'method_not_allowed'});
-  const secret = process.env.CRON_SECRET;
-  if (!secret || req.headers.authorization !== 'Bearer ' + secret)
+  const secrets = [process.env.SPORTVYN_CRON_SECRET, process.env.CRON_SECRET].filter(Boolean);
+  if (!secrets.length || !secrets.some(secret => req.headers.authorization === 'Bearer ' + secret))
     return res.status(401).json({error:'unauthorized'});
   const base = (process.env.SUPABASE_URL || '').replace(/\/+$/, '').replace(/\/rest\/v1$/, '');
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
