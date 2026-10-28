@@ -9,7 +9,7 @@ module.exports = [
   {id:'la_liga',name:'La Liga',country:'ES',provider:null,providerCode:null,status:'planned',market:'1x2_90min'},
   {id:'serie_a',name:'Serie A',country:'IT',provider:null,providerCode:null,status:'planned',market:'1x2_90min'},
   {id:'ligue_1',name:'Ligue 1',country:'FR',provider:null,providerCode:null,status:'planned',market:'1x2_90min'},
-  {id:'champions_league',name:'Champions League',country:'UEFA',provider:null,providerCode:null,status:'planned',market:'1x2_90min'},
-  {id:'europa_league',name:'Europa League',country:'UEFA',provider:null,providerCode:null,status:'planned',market:'1x2_90min'},
-  {id:'conference_league',name:'Conference League',country:'UEFA',provider:null,providerCode:null,status:'planned',market:'1x2_90min'}
+  {id:'champions_league',name:'Champions League',country:'UEFA',provider:'openligadb',providerCode:'ucl',status:'feed_identified',market:'1x2_90min'},
+  {id:'europa_league',name:'Europa League',country:'UEFA',provider:'openligadb',providerCode:'uel2026',status:'feed_identified',market:'1x2_90min'},
+  {id:'conference_league',name:'Conference League',country:'UEFA',provider:'openligadb',providerCode:'uecl2026',status:'feed_identified',market:'1x2_90min'}
 ];
