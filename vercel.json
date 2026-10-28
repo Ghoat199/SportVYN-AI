@@ -3,6 +3,10 @@
     {
       "path": "/api/import-football",
       "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/daily-football",
+      "schedule": "15 6 * * *"
     }
   ]
 }
