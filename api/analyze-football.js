@@ -1,4 +1,4 @@
-// SportVYN AI: transparent, deterministic Bundesliga baseline model.
+// SportVYN AI: transparent, deterministic league-separated Bundesliga baseline model.
 // GET /api/analyze-football (public preview, read-only; no tips are published).
 module.exports = async function handler(req,res){
  if(req.method!=='GET')return res.status(405).json({error:'method_not_allowed'});
@@ -6,20 +6,20 @@ module.exports = async function handler(req,res){
  const key=process.env.SUPABASE_SERVICE_ROLE_KEY;
  if(!base||!key)return res.status(503).json({error:'missing_supabase_configuration'});
  try{
-  const response=await fetch(base+'/rest/v1/sportvyn_matches?select=id,league,home_team,away_team,starts_at,status,home_score,away_score&sport=eq.football&league=eq.Bundesliga&order=starts_at.asc&limit=400',{headers:{apikey:key,Authorization:'Bearer '+key},signal:AbortSignal.timeout(12000)});
+  const response=await fetch(base+'/rest/v1/sportvyn_matches?select=id,league,home_team,away_team,starts_at,status,home_score,away_score&sport=eq.football&league=in.(Bundesliga,2.%20Bundesliga)&order=starts_at.asc&limit=800',{headers:{apikey:key,Authorization:'Bearer '+key},signal:AbortSignal.timeout(12000)});
   if(!response.ok)throw Error('database_http_'+response.status);
   const all=await response.json(),now=Date.now();
-  const upcoming=all.filter(m=>m.status==='scheduled'&&Date.parse(m.starts_at)>now).slice(0,15);
+  const upcoming=all.filter(m=>m.status==='scheduled'&&Date.parse(m.starts_at)>now).slice(0,30);
   const history=all.filter(m=>m.status==='finished'&&Number.isInteger(m.home_score)&&Number.isInteger(m.away_score));
-  function rate(team,home,cutoff){
-   const games=history.filter(m=>Date.parse(m.starts_at)<cutoff&&(home?m.home_team===team:m.away_team===team)).slice(-8);
+  function rate(team,home,cutoff,league){
+   const games=history.filter(m=>m.league===league&&Date.parse(m.starts_at)<cutoff&&(home?m.home_team===team:m.away_team===team)).slice(-8);
    const scored=games.reduce((s,m)=>s+(home?m.home_score:m.away_score),0);
    const conceded=games.reduce((s,m)=>s+(home?m.away_score:m.home_score),0);
    return {n:games.length,scored,conceded};
   }
   const predictions=upcoming.map(m=>{
-   const cutoff=Date.parse(m.starts_at),h=rate(m.home_team,true,cutoff),a=rate(m.away_team,false,cutoff);
-   if(h.n<3||a.n<3)return {match_id:m.id,match:m.home_team+' – '+m.away_team,starts_at:m.starts_at,status:'insufficient_data',home_games:h.n,away_games:a.n};
+   const cutoff=Date.parse(m.starts_at),h=rate(m.home_team,true,cutoff,m.league),a=rate(m.away_team,false,cutoff,m.league);
+   if(h.n<3||a.n<3)return {match_id:m.id,league:m.league,match:m.home_team+' – '+m.away_team,starts_at:m.starts_at,status:'insufficient_data',home_games:h.n,away_games:a.n};
    const homeLambda=Math.max(.2,Math.min(4.5,(h.scored/h.n+a.conceded/a.n)/2));
    const awayLambda=Math.max(.2,Math.min(4.5,(a.scored/a.n+h.conceded/h.n)/2));
    function pois(k,l){let p=Math.exp(-l);for(let i=1;i<=k;i++)p*=l/i;return p}
