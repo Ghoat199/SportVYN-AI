@@ -2,3 +2,4 @@ SportVYN AI deployment refresh
 Date: 2026-10-28
 Purpose: Trigger a new Vercel build from the latest main branch so api/import-uefa.js is included.
 No application logic changed.
+Second refresh: request Vercel production deployment for UEFA daily cron config (commit ebd7efe).
