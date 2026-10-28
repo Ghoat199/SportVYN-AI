@@ -1,11 +1,21 @@
 # SportVYN AI
 
-Öffentliche Multisport-Analysewebsite (erste Version).
+Öffentliche Multisport-Website mit Supabase-Lesezugriff und vorbereitetem Bundesliga-Import.
 
-## Veröffentlichung
+## Bundesliga-Import (OpenLigaDB)
 
-Das Repository in Vercel als neues Projekt importieren. Framework: Other; Build Command: leer; Output Directory: leer bzw. `.`. Die Startseite liegt in `index.html`.
+Serverless Function: `/api/import-football`
 
-## Stand
+In **Vercel → SportVYN AI → Settings → Environment Variables** setzen:
 
-Die Website ist ein statischer Prototyp ohne Live-Sportdaten, Wettquoten, automatische Tipps oder Echtgeldwetten. Sportartenfilter sind interaktiv. Für automatische Analysen werden Datenanbieter, Backend, Modell und Ergebnisabrechnung benötigt.
+- `SUPABASE_URL` = `https://tdnqtztnkdxtwpdtevbx.supabase.co`
+- `SUPABASE_SERVICE_ROLE_KEY` = geheimer Service-Role-Key des zugehörigen Supabase-Projekts (nur serverseitig)
+- `CRON_SECRET` = selbst erzeugter, langer zufälliger geheimer Wert
+
+**Niemals** Service-Role-Key oder CRON_SECRET in `index.html`, GitHub oder Chat veröffentlichen.
+
+Nach dem Speichern der Variablen in Vercel ein neues Deployment auslösen.
+
+Der Import-Endpunkt akzeptiert nur GET mit `Authorization: Bearer <CRON_SECRET>`. Ein normaler Browseraufruf ohne Token liefert absichtlich 401. Der Endpunkt holt die laufende Bundesliga-Saison von OpenLigaDB und schreibt bis zu ca. 306 Spiele per Upsert in `sportvyn_matches`. Für einen automatischen täglichen Aufruf kann ein Vercel-Cron-Eintrag in `vercel.json` verwendet werden, sobald die Secrets konfiguriert sind.
+
+Der Import erstellt **keine** Wett-Tipps, und die öffentliche Website zeigt nur veröffentlichte Analysen. OpenLigaDB liefert keine Buchmacherquoten.
