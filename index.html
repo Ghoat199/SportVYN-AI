@@ -53,7 +53,7 @@ async function showFootballPredictions(){
  const section=document.createElement('section');
  section.id='model-preview';
  section.style.marginTop='24px';
- const heading=document.createElement('h3');heading.textContent='Bundesliga · Experimentelle Modellprognosen';
+ const heading=document.createElement('h3');heading.textContent='Bundesliga & 2. Bundesliga · Experimentelle Modellprognosen';
  const note=document.createElement('p');note.className='muted';note.textContent='Poisson-Basismodell auf Grundlage bisheriger Ergebnisse. Keine kalibrierten Wahrscheinlichkeiten, kein Quotenvergleich und keine Wettempfehlungen.';
  const state=document.createElement('p');state.className='muted';state.textContent='Prognosen werden geladen …';
  const cards=document.createElement('div');cards.style.cssText='display:grid;gap:12px';
@@ -67,7 +67,7 @@ async function showFootballPredictions(){
   state.textContent=data.completed_matches+' abgeschlossene Spiele als Datenbasis · '+data.predictions.length+' kommende Begegnungen';
   for(const p of data.predictions){
    const card=node('article',undefined,'card');
-   card.append(node('h3',p.match));
+   card.append(node('h3',(p.league?p.league+' · ':'')+p.match));
    card.append(node('p',new Date(p.starts_at).toLocaleString('de-DE',{dateStyle:'medium',timeStyle:'short',timeZone:'Europe/Berlin'})+' Uhr'));
    if(p.status==='model_ready'){
     card.append(node('p','Heimsieg '+pct(p.probabilities.home)+' · Remis '+pct(p.probabilities.draw)+' · Auswärtssieg '+pct(p.probabilities.away)));
