@@ -1,4 +1,4 @@
-// Vercel Serverless Function: import Bundesliga matches from OpenLigaDB.
+// Vercel Serverless Function: import Bundesliga and 2. Bundesliga from OpenLigaDB.
 // Required Vercel secrets: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, and SPORTVYN_CRON_SECRET or CRON_SECRET.
 // Never expose the service-role key in client-side code.
 module.exports = async function handler(req, res) {
@@ -13,11 +13,17 @@ module.exports = async function handler(req, res) {
     const now = new Date();
     const year = now.getUTCFullYear();
     const season = now.getUTCMonth() >= 6 ? year : year - 1;
-    const source = 'https://api.openligadb.de/getmatchdata/bl1/' + season;
-    const sourceResp = await fetch(source, {headers:{accept:'application/json'}, signal:AbortSignal.timeout(15000)});
-    if (!sourceResp.ok) throw new Error('OpenLigaDB HTTP ' + sourceResp.status);
-    const matches = await sourceResp.json();
-    if (!Array.isArray(matches)) throw new Error('Invalid match feed');
+    const leagues=[{code:'bl1',name:'Bundesliga'},{code:'bl2',name:'2. Bundesliga'}];
+    const results=[];
+    const endpoint=base+'/rest/v1/sportvyn_matches?on_conflict=provider,provider_match_id';
+    const headers={apikey:key,Authorization:'Bearer '+key,'Content-Type':'application/json',Prefer:'resolution=merge-duplicates,return=minimal'};
+    for(const league of leagues){
+    try {
+    const source='https://api.openligadb.de/getmatchdata/'+league.code+'/'+season;
+    const sourceResp=await fetch(source,{headers:{accept:'application/json'},signal:AbortSignal.timeout(15000)});
+    if(!sourceResp.ok)throw new Error('OpenLigaDB HTTP '+sourceResp.status);
+    const matches=await sourceResp.json();
+    if(!Array.isArray(matches))throw new Error('Invalid match feed');
     const rows = matches.filter(m=>m.matchID && m.team1?.teamName && m.team2?.teamName && m.matchDateTimeUTC)
       .map(m=>{
         const final = Boolean(m.matchIsFinished);
@@ -27,7 +33,7 @@ module.exports = async function handler(req, res) {
           provider:'openligadb',
           provider_match_id:String(m.matchID),
           sport:'football',
-          league:'Bundesliga',
+          league:league.name,
           home_team:m.team1.teamName,
           away_team:m.team2.teamName,
           starts_at:new Date(m.matchDateTimeUTC).toISOString(),
@@ -36,15 +42,16 @@ module.exports = async function handler(req, res) {
           away_score:final && end && Number.isInteger(end.pointsTeam2)?end.pointsTeam2:null
         };
       });
-    const endpoint=base+'/rest/v1/sportvyn_matches?on_conflict=provider,provider_match_id';
-    const headers={apikey:key,Authorization:'Bearer '+key,'Content-Type':'application/json',Prefer:'resolution=merge-duplicates,return=minimal'};
     let count=0;
     for(let i=0;i<rows.length;i+=50){
       const r=await fetch(endpoint,{method:'POST',headers,body:JSON.stringify(rows.slice(i,i+50)),signal:AbortSignal.timeout(15000)});
       if(!r.ok) throw new Error('Supabase HTTP '+r.status+': '+(await r.text()).slice(0,300));
       count+=Math.min(50,rows.length-i);
     }
-    return res.status(200).json({ok:true,provider:'openligadb',league:'bl1',season,imported:count});
+    results.push({league:league.name,imported:count,ok:true});
+    }catch(err){console.error('SportVYN import '+league.code,err);results.push({league:league.name,ok:false,error:String(err.message||err)});}
+    }
+    return res.status(results.some(r=>r.ok)?200:502).json({ok:results.every(r=>r.ok),provider:'openligadb',season,results});
   } catch(e) {
     console.error('SportVYN import failed:',e);
     return res.status(502).json({error:'import_failed',detail:String(e.message||e)});
