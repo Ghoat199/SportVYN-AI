@@ -77,7 +77,7 @@ function saveVirtualTip(p,stake,feedback){
 async function showFootballPredictions(){
  const panel=document.querySelector('#analysen .panel');
  const section=document.createElement('section');section.id='model-preview';section.style.marginTop='24px';
- const heading=node('h3','Bundesliga & 2. Bundesliga · Modellquoten');
+ const heading=node('h3','Fußball-Ligen · Modellquoten');
  const note=node('p','Experimentelle Poisson-Prognosen und faire Modellquoten (1 / Wahrscheinlichkeit). Keine Buchmacherquoten, keine geprüften Value-Tipps oder Wettempfehlungen.','muted');
  const filters=node('div',undefined,'filters');
  const state=node('p','Prognosen werden geladen …','muted');
@@ -132,7 +132,7 @@ async function showFootballPredictions(){
    cards.append(card);
   }
  }
- for(const league of ['Bundesliga','2. Bundesliga']){
+ for(const league of ['Bundesliga','2. Bundesliga','Premier League','La Liga']){
   const b=node('button',league,league===selected?'active':'');
   b.type='button';b.addEventListener('click',()=>{selected=league;for(const x of filters.querySelectorAll('button'))x.classList.toggle('active',x===b);render()});
   filters.append(b);
