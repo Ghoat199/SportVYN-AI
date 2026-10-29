@@ -144,6 +144,23 @@ async function showFootballPredictions(){
  }catch(e){state.textContent='Modellprognosen sind derzeit nicht verfügbar.';console.error('SportVYN Modell:',e)}
 }
 showFootballPredictions();
+async function showTomorrowFixtures(){
+ const panel=document.querySelector('#analysen .panel');if(!panel)return;
+ const section=document.createElement('section');section.style.marginTop='24px';
+ section.append(node('h3','Alle verfügbaren Spiele morgen'),node('p','Spielplan aus angebundenen Datenquellen, inklusive DFB-Pokal und UEFA-Wettbewerben, sofern Spiele importiert wurden. Weitere Kontinente folgen nach Datenquellenprüfung. Spielplan bedeutet nicht automatisch Modellvorschlag.','muted'));
+ const status=node('p','Spielplan wird geladen …','muted');const games=node('div');games.style.cssText='display:grid;gap:8px';section.append(status,games);panel.append(section);
+ const tomorrow=new Date(Date.now()+86400000);
+ const date=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Berlin',year:'numeric',month:'2-digit',day:'2-digit'}).format(tomorrow);
+ try{
+  const r=await fetch('/api/fixtures-by-date?date='+date,{cache:'no-store'});if(!r.ok)throw Error('HTTP '+r.status);
+  const data=await r.json();if(!data.ok)throw Error('Invalid fixture response');
+  status.textContent=data.count+' importierte Spiele für '+date.split('-').reverse().join('.')+' (Europe/Berlin)';
+  if(!data.count)games.append(node('p','Für morgen wurden noch keine Spiele importiert.','muted'));
+  for(const g of data.games){const c=node('article',undefined,'card');c.append(node('strong',g.match),node('p',g.league+' · '+new Date(g.starts_at).toLocaleTimeString('de-DE',{timeZone:'Europe/Berlin',hour:'2-digit',minute:'2-digit'})+' Uhr'));games.append(c)}
+ }catch(e){status.textContent='Spielplan aktuell nicht verfügbar.';console.error('Tomorrow fixtures',e)}
+}
+showTomorrowFixtures();
+
 async function loadModelStats(){
  const grid=document.getElementById("stats-cards"),note=document.getElementById("stats-note");
  try{
