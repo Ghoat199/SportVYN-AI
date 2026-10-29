@@ -7,10 +7,6 @@
     {
       "path": "/api/daily-football",
       "schedule": "15 6 * * *"
-    },
-    {
-      "path": "/api/import-uefa",
-      "schedule": "30 5 * * *"
     }
   ]
 }
