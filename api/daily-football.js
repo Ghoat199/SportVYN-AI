@@ -12,9 +12,9 @@ module.exports=async function handler(req,res){
  async function write(path,method,body,prefer){const r=await fetch(base+'/rest/v1/'+path,{method,headers:{...headers,Prefer:prefer||'return=minimal'},body:JSON.stringify(body),signal:AbortSignal.timeout(12000)});if(!r.ok)throw Error('write '+r.status+' '+(await r.text()).slice(0,200))}
  try{
   const now=Date.now();
-  const matches=await read('sportvyn_matches?select=id,home_team,away_team,starts_at,status,home_score,away_score&sport=eq.football&league=eq.Bundesliga&order=starts_at.asc&limit=400');
+  const matches=await read('sportvyn_matches?select=id,league,home_team,away_team,starts_at,status,home_score,away_score&sport=eq.football&league=in.(Bundesliga,2.%20Bundesliga)&order=starts_at.asc&limit=800');
   const completed=matches.filter(m=>m.status==='finished'&&Number.isInteger(m.home_score)&&Number.isInteger(m.away_score));
-  const snapshots=await read('sportvyn_model_forecasts?select=id,match_id,settled_at&limit=400');
+  const snapshots=await read('sportvyn_model_forecasts?select=id,match_id,settled_at&limit=1000');
   const byMatch=new Map(matches.map(m=>[m.id,m]));
   let settled=0,created=0;
   for(const snap of snapshots){
@@ -29,15 +29,15 @@ module.exports=async function handler(req,res){
    settled++;
   }
   const existing=new Set(snapshots.map(s=>s.match_id));
-  const future=matches.filter(m=>m.status==='scheduled'&&Date.parse(m.starts_at)>now).slice(0,15);
-  function form(team,home,cutoff){
-   const g=completed.filter(m=>Date.parse(m.starts_at)<cutoff&&(home?m.home_team===team:m.away_team===team)).slice(-8);
+  const future=matches.filter(m=>m.status==='scheduled'&&Date.parse(m.starts_at)>now).slice(0,30);
+  function form(team,home,cutoff,league){
+   const g=completed.filter(m=>m.league===league&&Date.parse(m.starts_at)<cutoff&&(home?m.home_team===team:m.away_team===team)).slice(-8);
    return {n:g.length,scored:g.reduce((s,m)=>s+(home?m.home_score:m.away_score),0),conceded:g.reduce((s,m)=>s+(home?m.away_score:m.home_score),0)}
   }
   function poisson(k,l){let p=Math.exp(-l);for(let i=1;i<=k;i++)p*=l/i;return p}
   for(const m of future){
    if(existing.has(m.id))continue;
-   const cutoff=Date.parse(m.starts_at),h=form(m.home_team,true,cutoff),a=form(m.away_team,false,cutoff);
+   const cutoff=Date.parse(m.starts_at),h=form(m.home_team,true,cutoff,m.league),a=form(m.away_team,false,cutoff,m.league);
    if(h.n<3||a.n<3)continue;
    const hl=Math.max(.2,Math.min(4.5,(h.scored/h.n+a.conceded/a.n)/2)),al=Math.max(.2,Math.min(4.5,(a.scored/a.n+h.conceded/h.n)/2));
    let p=[0,0,0],sum=0;
