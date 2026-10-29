@@ -153,12 +153,34 @@ async function showWeekFixtures(){
  try{
   const r=await fetch('/api/fixtures-week',{cache:'no-store'});if(!r.ok)throw Error('HTTP '+r.status);
   const data=await r.json();if(!data.ok||!Array.isArray(data.games))throw Error('Ungültiger Spielplan');
+  // Read-only 1X2 probabilities: display only when the model has enough verified results.
+  let modelById=new Map();
+  try{
+   const modelResponse=await fetch('/api/analyze-football',{cache:'no-store'});
+   if(modelResponse.ok){
+    const modelData=await modelResponse.json();
+    if(modelData.ok&&Array.isArray(modelData.predictions))modelById=new Map(modelData.predictions.filter(p=>p.status==='model_ready'&&p.probabilities).map(p=>[String(p.match_id),p]));
+   }
+  }catch(e){console.warn('Fixture predictions unavailable',e)}
   const dates=[...new Set(data.games.map(g=>g.date))].sort();
   const choices=['Alle',...dates],buttons=[];let selected='Alle';
   function render(){
    games.replaceChildren();const shown=selected==='Alle'?data.games:data.games.filter(g=>g.date===selected);
    status.textContent=shown.length+' importierte Spiele'+(selected==='Alle'?' in den nächsten 7 Tagen':' am '+selected.split('-').reverse().join('.'));
-   for(const g of shown){const c=node('article',undefined,'card');c.append(node('strong',g.match),node('p',g.league+' · '+new Date(g.starts_at).toLocaleString('de-DE',{timeZone:'Europe/Berlin',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})+' Uhr'));games.append(c)}
+   for(const g of shown){
+    const c=node('article',undefined,'card');
+    c.append(node('strong',g.match),node('p',g.league+' · '+new Date(g.starts_at).toLocaleString('de-DE',{timeZone:'Europe/Berlin',day:'2-digit',month:'2-digit',hour:'2-digit'})+' Uhr'));
+    const p=modelById.get(String(g.id));
+    if(p){
+     const pct=v=>(Number(v)*100).toLocaleString('de-DE',{minimumFractionDigits:1,maximumFractionDigits:1})+' %';
+     c.append(node('p','1 Heimsieg: '+pct(p.probabilities.home)+' · X Remis: '+pct(p.probabilities.draw)+' · 2 Auswärtssieg: '+pct(p.probabilities.away)));
+     const label=({1:'Heimsieg',X:'Unentschieden',2:'Auswärtssieg'})[p.model_favorite];
+     const tip=node('p','Modellfavorit: '+p.model_favorite+' – '+label+' ('+pct(p.model_favorite_probability)+')');
+     tip.style.cssText='color:#5ee0a3;font-weight:800';c.append(tip);
+     c.append(node('p','Experimentelles Modell, keine Wettempfehlung.','muted'));
+    }else c.append(node('p','1X2-Prognose noch nicht verfügbar: unzureichende oder nicht verifizierte Ergebnisdaten.','muted'));
+    games.append(c)
+   }
    if(!shown.length)games.append(node('p','Keine importierten Spiele für diese Auswahl.','muted'));
    buttons.forEach(({button,value})=>button.classList.toggle('active',value===selected));
   }
