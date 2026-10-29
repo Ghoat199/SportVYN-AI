@@ -1,4 +1,4 @@
-// SportVYN AI: transparent, deterministic league-separated Bundesliga baseline model.
+// SportVYN AI: transparent, deterministic league-separated multi-league baseline model.
 // GET /api/analyze-football (public preview, read-only; no tips are published).
 module.exports = async function handler(req,res){
  if(req.method!=='GET')return res.status(405).json({error:'method_not_allowed'});
@@ -6,10 +6,10 @@ module.exports = async function handler(req,res){
  const key=process.env.SUPABASE_SERVICE_ROLE_KEY;
  if(!base||!key)return res.status(503).json({error:'missing_supabase_configuration'});
  try{
-  const response=await fetch(base+'/rest/v1/sportvyn_matches?select=id,league,home_team,away_team,starts_at,status,home_score,away_score&sport=eq.football&league=in.(Bundesliga,2.%20Bundesliga)&order=starts_at.asc&limit=800',{headers:{apikey:key,Authorization:'Bearer '+key},signal:AbortSignal.timeout(12000)});
+  const response=await fetch(base+'/rest/v1/sportvyn_matches?select=id,league,home_team,away_team,starts_at,status,home_score,away_score&sport=eq.football&league=in.(Bundesliga,2.%20Bundesliga,Premier%20League,La%20Liga)&order=starts_at.asc&limit=1500',{headers:{apikey:key,Authorization:'Bearer '+key},signal:AbortSignal.timeout(12000)});
   if(!response.ok)throw Error('database_http_'+response.status);
   const all=await response.json(),now=Date.now();
-  const upcoming=all.filter(m=>m.status==='scheduled'&&Date.parse(m.starts_at)>now).slice(0,30);
+  const upcoming=all.filter(m=>m.status==='scheduled'&&Date.parse(m.starts_at)>now).slice(0,100);
   const history=all.filter(m=>m.status==='finished'&&Number.isInteger(m.home_score)&&Number.isInteger(m.away_score));
   function rate(team,home,cutoff,league){
    const games=history.filter(m=>m.league===league&&Date.parse(m.starts_at)<cutoff&&(home?m.home_team===team:m.away_team===team)).slice(-8);
