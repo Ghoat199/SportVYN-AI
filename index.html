@@ -50,31 +50,43 @@ document.querySelectorAll('[data-sport]').forEach(button=>button.addEventListene
 loadTips();
 async function showFootballPredictions(){
  const panel=document.querySelector('#analysen .panel');
- const section=document.createElement('section');
- section.id='model-preview';
- section.style.marginTop='24px';
- const heading=document.createElement('h3');heading.textContent='Bundesliga & 2. Bundesliga · Experimentelle Modellprognosen';
- const note=document.createElement('p');note.className='muted';note.textContent='Poisson-Basismodell auf Grundlage bisheriger Ergebnisse. Keine kalibrierten Wahrscheinlichkeiten, kein Quotenvergleich und keine Wettempfehlungen.';
- const state=document.createElement('p');state.className='muted';state.textContent='Prognosen werden geladen …';
- const cards=document.createElement('div');cards.style.cssText='display:grid;gap:12px';
- section.append(heading,note,state,cards);panel.append(section);
+ const section=document.createElement('section');section.id='model-preview';section.style.marginTop='24px';
+ const heading=node('h3','Bundesliga & 2. Bundesliga · Modellquoten');
+ const note=node('p','Experimentelle Poisson-Prognosen und faire Modellquoten (1 / Wahrscheinlichkeit). Keine Buchmacherquoten, keine geprüften Value-Tipps oder Wettempfehlungen.','muted');
+ const filters=node('div',undefined,'filters');
+ const state=node('p','Prognosen werden geladen …','muted');
+ const cards=node('div');cards.style.cssText='display:grid;gap:12px';
+ section.append(heading,note,filters,state,cards);panel.append(section);
+ let selected='Bundesliga',predictions=[];
  const pct=n=>(100*n).toLocaleString('de-DE',{maximumFractionDigits:1,minimumFractionDigits:1})+' %';
- try{
-  const r=await fetch('/api/analyze-football',{cache:'no-store'});
-  if(!r.ok)throw Error('HTTP '+r.status);
-  const data=await r.json();
-  if(!data.ok||!Array.isArray(data.predictions))throw Error('Ungültige Antwort');
-  state.textContent=data.completed_matches+' abgeschlossene Spiele als Datenbasis · '+data.predictions.length+' kommende Begegnungen';
-  for(const p of data.predictions){
+ const odd=n=>Number(n).toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2});
+ function render(){
+  cards.replaceChildren();
+  const selectedGames=predictions.filter(p=>p.league===selected);
+  state.textContent=selectedGames.length+' kommende Begegnungen in '+selected;
+  if(!selectedGames.length){cards.append(node('p','Aktuell keine kommenden Spiele in dieser Liga.','muted'));return}
+  for(const p of selectedGames){
    const card=node('article',undefined,'card');
-   card.append(node('h3',(p.league?p.league+' · ':'')+p.match));
+   card.append(node('h3',p.match));
    card.append(node('p',new Date(p.starts_at).toLocaleString('de-DE',{dateStyle:'medium',timeStyle:'short',timeZone:'Europe/Berlin'})+' Uhr'));
    if(p.status==='model_ready'){
-    card.append(node('p','Heimsieg '+pct(p.probabilities.home)+' · Remis '+pct(p.probabilities.draw)+' · Auswärtssieg '+pct(p.probabilities.away)));
-    card.append(node('p','Erwartete Tore: '+p.expected_goals.home+' : '+p.expected_goals.away+' · Datengrundlage: '+p.home_games+' Heim- und '+p.away_games+' Auswärtsspiele'));
+    card.append(node('p','1: '+pct(p.probabilities.home)+' · X: '+pct(p.probabilities.draw)+' · 2: '+pct(p.probabilities.away)));
+    if(p.fair_odds)card.append(node('p','Faire Modellquoten: 1 '+odd(p.fair_odds.home)+' · X '+odd(p.fair_odds.draw)+' · 2 '+odd(p.fair_odds.away)));
+    card.append(node('p','Modellfavorit: '+p.model_favorite+' ('+pct(p.model_favorite_probability)+') · Erwartete Tore: '+p.expected_goals.home+' : '+p.expected_goals.away));
+    card.append(node('p','Datengrundlage: '+p.home_games+' Heim- und '+p.away_games+' Auswärtsspiele'));
    }else card.append(node('p','Noch zu wenig Daten für eine Modellberechnung.'));
    cards.append(card);
   }
+ }
+ for(const league of ['Bundesliga','2. Bundesliga']){
+  const b=node('button',league,league===selected?'active':'');
+  b.type='button';b.addEventListener('click',()=>{selected=league;for(const x of filters.querySelectorAll('button'))x.classList.toggle('active',x===b);render()});
+  filters.append(b);
+ }
+ try{
+  const r=await fetch('/api/analyze-football',{cache:'no-store'});if(!r.ok)throw Error('HTTP '+r.status);
+  const data=await r.json();if(!data.ok||!Array.isArray(data.predictions))throw Error('Ungültige Antwort');
+  predictions=data.predictions;render();
  }catch(e){state.textContent='Modellprognosen sind derzeit nicht verfügbar.';console.error('SportVYN Modell:',e)}
 }
 showFootballPredictions();
