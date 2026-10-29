@@ -13,7 +13,7 @@ module.exports = async function handler(req, res) {
     const now = new Date();
     const year = now.getUTCFullYear();
     const season = now.getUTCMonth() >= 6 ? year : year - 1;
-    const leagues=[{code:'bl1',name:'Bundesliga'},{code:'bl2',name:'2. Bundesliga'},{code:'bl3',name:'3. Liga'},{code:'pl',name:'Premier League'},{code:'la1',name:'La Liga'},{code:'dfb',name:'DFB-Pokal'}];
+    const leagues=[{code:'bl1',name:'Bundesliga'},{code:'bl2',name:'2. Bundesliga'},{code:'bl3',name:'3. Liga'},{code:'ffb1',name:'Frauen-Bundesliga'},{code:'pl',name:'Premier League'},{code:'la1',name:'La Liga'},{code:'dfb',name:'DFB-Pokal'}];
     const results=[];
     const endpoint=base+'/rest/v1/sportvyn_matches?on_conflict=provider,provider_match_id';
     const headers={apikey:key,Authorization:'Bearer '+key,'Content-Type':'application/json',Prefer:'resolution=merge-duplicates,return=minimal'};
