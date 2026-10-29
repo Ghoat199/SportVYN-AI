@@ -12,7 +12,7 @@ module.exports = [
   {id:'eredivisie',name:'Eredivisie',country:'NL',provider:null,providerCode:null,status:'planned',market:'1x2_90min'},
   {id:'primeira_liga',name:'Primeira Liga',country:'PT',provider:null,providerCode:null,status:'planned',market:'1x2_90min'},
   {id:'super_lig',name:'Süper Lig',country:'TR',provider:null,providerCode:null,status:'planned',market:'1x2_90min'},
-  {id:'dritte_liga',name:'3. Liga',country:'DE',provider:null,providerCode:null,status:'planned',market:'1x2_90min'},
+  {id:'dritte_liga',name:'3. Liga',country:'DE',provider:'openligadb',providerCode:'bl3',status:'import_configured',market:'1x2_90min'},
   {id:'belgian_pro_league',name:'Belgian Pro League',country:'BE',provider:null,providerCode:null,status:'planned',market:'1x2_90min'},
   {id:'swiss_super_league',name:'Swiss Super League',country:'CH',provider:null,providerCode:null,status:'planned',market:'1x2_90min'},
   {id:'champions_league',name:'Champions League',country:'UEFA',provider:'openligadb',providerCode:'ucl',status:'feed_verified',market:'1x2_90min'},
