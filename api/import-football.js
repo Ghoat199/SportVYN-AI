@@ -52,7 +52,44 @@ module.exports = async function handler(req, res) {
     results.push({league:league.name,imported:count,ok:true});
     }catch(err){console.error('SportVYN import '+league.code,err);results.push({league:league.name,ok:false,error:String(err.message||err)});}
     }
-    return res.status(results.some(r=>r.ok)?200:502).json({ok:results.every(r=>r.ok),provider:'openligadb',season,results});
+    // Historical 90-minute results only. CSV feeds are NOT treated as a verified future fixture calendar.
+    // Separate provider IDs prevent collisions with OpenLigaDB.
+    const seasonCode=String(season).slice(-2)+String(season+1).slice(-2);
+    function parseCsv(csv){
+      const lines=csv.replace(/^\uFEFF/,'').split(/\r?\n/).filter(Boolean);
+      function fields(line){const out=[];let field='',quoted=false;for(let i=0;i<line.length;i++){const c=line[i];if(c==='"'&&line[i+1]==='"'&&quoted){field+='"';i++}else if(c==='"')quoted=!quoted;else if(c===','&&!quoted){out.push(field);field=''}else field+=c}out.push(field);return out}
+      const columns=fields(lines.shift()).map(v=>v.trim());
+      return lines.map(line=>{const values=fields(line),row={};columns.forEach((key,i)=>row[key]=(values[i]||'').trim());return row});
+    }
+    for(const league of [{code:'I1',name:'Serie A'},{code:'F1',name:'Ligue 1'}]){
+      try{
+        const source='https://www.football-data.co.uk/mmz4281/'+seasonCode+'/'+league.code+'.csv';
+        const response=await fetch(source,{headers:{accept:'text/csv'},signal:AbortSignal.timeout(12000)});
+        if(!response.ok)throw Error('Football-Data HTTP '+response.status);
+        const csv=await response.text(),parsed=parseCsv(csv);
+        if(!parsed.length||!parsed.some(r=>r.HomeTeam&&r.AwayTeam&&r.Date))throw Error('Invalid CSV feed');
+        const rows=[];
+        for(const m of parsed){
+          if(m.Div&&m.Div!==league.code)continue;
+          if(!m.HomeTeam||!m.AwayTeam||!m.Date||!/^\d+$/.test(m.FTHG||'')||!/^\d+$/.test(m.FTAG||''))continue;
+          const parts=m.Date.split('/');if(parts.length!==3)continue;
+          let [day,month,yr]=parts.map(Number);if(yr<100)yr+=2000;
+          if(!Number.isInteger(day)||!Number.isInteger(month)||yr<2020||day<1||day>31||month<1||month>12)continue;
+          const date=new Date(Date.UTC(yr,month-1,day,12));
+          if(date.getUTCFullYear()!==yr||date.getUTCMonth()!==month-1||date.getUTCDate()!==day||date.getTime()>Date.now())continue;
+          // Noon UTC represents the result's calendar date, not a verified kickoff time.
+          const dateKey=[yr,String(month).padStart(2,'0'),String(day).padStart(2,'0')].join('-');
+          rows.push({provider:'football-data-co-uk',provider_match_id:[league.code,dateKey,m.HomeTeam,m.AwayTeam].join('|'),sport:'football',league:league.name,home_team:m.HomeTeam,away_team:m.AwayTeam,starts_at:date.toISOString(),status:'finished',home_score:Number(m.FTHG),away_score:Number(m.FTAG)});
+        }
+        if(!rows.length)throw Error('No verified completed matches in CSV');
+        for(let i=0;i<rows.length;i+=50){
+          const r=await fetch(endpoint,{method:'POST',headers,body:JSON.stringify(rows.slice(i,i+50)),signal:AbortSignal.timeout(15000)});
+          if(!r.ok)throw Error('Supabase HTTP '+r.status+': '+(await r.text()).slice(0,200));
+        }
+        results.push({league:league.name,imported:rows.length,ok:true,source:'football-data.co.uk',historical_only:true});
+      }catch(err){console.error('SportVYN historical import '+league.code,err);results.push({league:league.name,ok:false,error:String(err.message||err)});}
+    }
+    return res.status(results.some(r=>r.ok)?200:502).json({ok:results.every(r=>r.ok),season,results});
   } catch(e) {
     console.error('SportVYN import failed:',e);
     return res.status(502).json({error:'import_failed',detail:String(e.message||e)});
