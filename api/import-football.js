@@ -13,7 +13,7 @@ module.exports = async function handler(req, res) {
     const now = new Date();
     const year = now.getUTCFullYear();
     const season = now.getUTCMonth() >= 6 ? year : year - 1;
-    const leagues=[{code:'bl1',name:'Bundesliga'},{code:'bl2',name:'2. Bundesliga'},{code:'dfb',name:'DFB-Pokal'}];
+    const leagues=[{code:'bl1',name:'Bundesliga'},{code:'bl2',name:'2. Bundesliga'},{code:'pl',name:'Premier League'},{code:'la1',name:'La Liga'},{code:'dfb',name:'DFB-Pokal'}];
     const results=[];
     const endpoint=base+'/rest/v1/sportvyn_matches?on_conflict=provider,provider_match_id';
     const headers={apikey:key,Authorization:'Bearer '+key,'Content-Type':'application/json',Prefer:'resolution=merge-duplicates,return=minimal'};
@@ -23,7 +23,7 @@ module.exports = async function handler(req, res) {
     const sourceResp=await fetch(source,{headers:{accept:'application/json'},signal:AbortSignal.timeout(15000)});
     if(!sourceResp.ok)throw new Error('OpenLigaDB HTTP '+sourceResp.status);
     const matches=await sourceResp.json();
-    if(!Array.isArray(matches))throw new Error('Invalid match feed');
+    if(!Array.isArray(matches)||!matches.length)throw new Error('Empty or invalid match feed');
     const rows = matches.filter(m=>m.matchID && m.team1?.teamName && m.team2?.teamName && m.matchDateTimeUTC)
       .map(m=>{
         const final = Boolean(m.matchIsFinished);
