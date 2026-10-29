@@ -72,7 +72,11 @@ async function showFootballPredictions(){
    if(p.status==='model_ready'){
     card.append(node('p','1: '+pct(p.probabilities.home)+' · X: '+pct(p.probabilities.draw)+' · 2: '+pct(p.probabilities.away)));
     if(p.fair_odds)card.append(node('p','Faire Modellquoten: 1 '+odd(p.fair_odds.home)+' · X '+odd(p.fair_odds.draw)+' · 2 '+odd(p.fair_odds.away)));
-    card.append(node('p','Modellfavorit: '+p.model_favorite+' ('+pct(p.model_favorite_probability)+') · Erwartete Tore: '+p.expected_goals.home+' : '+p.expected_goals.away));
+    const outcomeLabel=({1:'Heimsieg',X:'Unentschieden',2:'Auswärtssieg'})[p.model_favorite]||'Nicht verfügbar';
+    const recommendation=node('p','Modellvorschlag: '+outcomeLabel+' ('+pct(p.model_favorite_probability)+')');
+    recommendation.style.cssText='font-weight:800;color:#5ee0a3;font-size:17px';
+    card.append(recommendation);
+    card.append(node('p','Erwartete Tore: '+p.expected_goals.home+' : '+p.expected_goals.away));
     card.append(node('p','Datengrundlage: '+p.home_games+' Heim- und '+p.away_games+' Auswärtsspiele'));
    }else card.append(node('p','Noch zu wenig Daten für eine Modellberechnung.'));
    cards.append(card);
