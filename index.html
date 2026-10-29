@@ -48,6 +48,32 @@ async function loadTips(){
 }
 document.querySelectorAll('[data-sport]').forEach(button=>button.addEventListener('click',()=>{document.querySelectorAll('[data-sport]').forEach(b=>b.classList.remove('active'));button.classList.add('active');selectedSport=button.dataset.sport;renderTips()}));
 loadTips();
+const VIRTUAL_TIPS_KEY='sportvyn_virtual_tests_v1';
+function readVirtualTips(){try{const a=JSON.parse(localStorage.getItem(VIRTUAL_TIPS_KEY)||'[]');return Array.isArray(a)?a:[]}catch{return []}}
+function renderVirtualTips(){
+ const target=document.getElementById('virtual-tip-history');if(!target)return;
+ target.replaceChildren();const tips=readVirtualTips();
+ if(!tips.length){target.append(node('p','Noch keine virtuellen Tipps auf diesem Gerät gespeichert.','muted'));return}
+ target.append(node('p',tips.length+' virtuelle Tests auf diesem Gerät gespeichert.','muted'));
+ for(const t of tips.slice().reverse().slice(0,30)){
+  const item=node('article',undefined,'card');
+  item.append(node('strong',t.match));
+  item.append(node('p',t.league+' · '+({1:'Heimsieg',X:'Unentschieden',2:'Auswärtssieg'}[t.selection]||t.selection)+' · '+Number(t.stake).toLocaleString('de-DE',{style:'currency',currency:'EUR'})+' virtuell'));
+  item.append(node('p','Modellwahrscheinlichkeit zum Speichern: '+(100*t.probability).toLocaleString('de-DE',{maximumFractionDigits:1})+' % · '+new Date(t.saved_at).toLocaleString('de-DE')));
+  target.append(item);
+ }
+}
+function saveVirtualTip(p,stake,feedback){
+ const amount=Number(String(stake).replace(',','.'));
+ if(!Number.isFinite(amount)||amount<=0||amount>10000){feedback.textContent='Bitte einen virtuellen Einsatz zwischen 0,01 € und 10.000 € eingeben.';return}
+ if(Date.parse(p.starts_at)<=Date.now()){feedback.textContent='Spiel hat bereits begonnen. Kein neuer Test möglich.';return}
+ try{
+  const tips=readVirtualTips();
+  if(tips.some(t=>t.match_id===p.match_id)){feedback.textContent='Dieses Spiel wurde auf diesem Gerät bereits getestet.';return}
+  tips.push({match_id:p.match_id,match:p.match,league:p.league,starts_at:p.starts_at,selection:p.model_favorite,probability:p.model_favorite_probability,stake:Math.round(amount*100)/100,saved_at:new Date().toISOString()});
+  localStorage.setItem(VIRTUAL_TIPS_KEY,JSON.stringify(tips));feedback.textContent='Virtueller Tipp gespeichert – nur auf diesem Gerät.';renderVirtualTips();
+ }catch(e){feedback.textContent='Speichern nicht möglich. Bitte Browserspeicher prüfen.'}
+}
 async function showFootballPredictions(){
  const panel=document.querySelector('#analysen .panel');
  const section=document.createElement('section');section.id='model-preview';section.style.marginTop='24px';
@@ -56,7 +82,8 @@ async function showFootballPredictions(){
  const filters=node('div',undefined,'filters');
  const state=node('p','Prognosen werden geladen …','muted');
  const cards=node('div');cards.style.cssText='display:grid;gap:12px';
- section.append(heading,note,filters,state,cards);panel.append(section);
+ const historyHeading=node('h3','Meine virtuellen Tipp-Tests');const historyNote=node('p','Nur Testeinsätze, kein Echtgeld. Die Einträge werden ausschließlich im Browser dieses Geräts gespeichert und nicht automatisch mit den offiziellen Modellstatistiken abgeglichen.','muted');const history=node('div');history.id='virtual-tip-history';history.style.cssText='display:grid;gap:10px';
+ section.append(heading,note,filters,state,cards,historyHeading,historyNote,history);panel.append(section);renderVirtualTips();
  let selected='Bundesliga',predictions=[];
  const pct=n=>(100*n).toLocaleString('de-DE',{maximumFractionDigits:1,minimumFractionDigits:1})+' %';
  const odd=n=>Number(n).toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -78,6 +105,11 @@ async function showFootballPredictions(){
     card.append(recommendation);
     card.append(node('p','Erwartete Tore: '+p.expected_goals.home+' : '+p.expected_goals.away));
     card.append(node('p','Datengrundlage: '+p.home_games+' Heim- und '+p.away_games+' Auswärtsspiele'));
+    const testRow=node('div');testRow.style.cssText='display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px';
+    const stakeInput=document.createElement('input');stakeInput.type='number';stakeInput.min='0.01';stakeInput.max='10000';stakeInput.step='0.01';stakeInput.value='5';stakeInput.setAttribute('aria-label','Virtueller Einsatz in Euro');stakeInput.style.cssText='width:90px;padding:10px;border-radius:8px;background:#07131f;color:#eaf5fa;border:1px solid #315066';
+    const saveButton=node('button','Tipp testen');saveButton.type='button';saveButton.style.cssText='padding:10px 14px;border:0;border-radius:8px;background:#5ee0a3;color:#072018;font-weight:700;cursor:pointer';
+    const feedback=node('p','', 'muted');feedback.setAttribute('role','status');
+    saveButton.addEventListener('click',()=>saveVirtualTip(p,stakeInput.value,feedback));testRow.append(stakeInput,node('span','€ virtuell'),saveButton);card.append(testRow,feedback);
    }else card.append(node('p','Noch zu wenig Daten für eine Modellberechnung.'));
    cards.append(card);
   }
