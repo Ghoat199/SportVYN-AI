@@ -1,0 +1,27 @@
+name: Verify OpenFootball fixture sources
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '20 7 * * *'
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download season data (read only)
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/openfootball
+          curl --fail --location --retry 2 --max-time 30 --silent --show-error https://raw.githubusercontent.com/openfootball/football.json/master/2026-27/it.1.json -o /tmp/openfootball/it.1.json
+          curl --fail --location --retry 2 --max-time 30 --silent --show-error https://raw.githubusercontent.com/openfootball/football.json/master/2026-27/fr.1.json -o /tmp/openfootball/fr.1.json
+      - name: Validate Serie A and Ligue 1 without importing
+        run: node scripts/check-openfootball.mjs /tmp/openfootball/it.1.json /tmp/openfootball/fr.1.json | tee /tmp/openfootball/report.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: openfootball-dry-run
+          path: /tmp/openfootball/report.json
+          if-no-files-found: ignore
