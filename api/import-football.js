@@ -24,7 +24,7 @@ module.exports = async function handler(req, res) {
     if(!sourceResp.ok)throw new Error('OpenLigaDB HTTP '+sourceResp.status);
     const matches=await sourceResp.json();
     if(!Array.isArray(matches)||!matches.length)throw new Error('Empty or invalid match feed');
-    const rows = matches.filter(m=>m.matchID && m.team1?.teamName && m.team2?.teamName && m.matchDateTimeUTC)
+    const rows = matches.filter(m=>m.matchID && m.team1?.teamName && m.team2?.teamName && m.team1.teamName.trim().toLowerCase()!==m.team2.teamName.trim().toLowerCase() && m.matchDateTimeUTC && Number.isFinite(Date.parse(m.matchDateTimeUTC)) && Math.abs(Date.parse(m.matchDateTimeUTC)-now.getTime())<370*86400000)
       .map(m=>{
         const final = Boolean(m.matchIsFinished);
         const scores = Array.isArray(m.matchResults) ? m.matchResults : [];
