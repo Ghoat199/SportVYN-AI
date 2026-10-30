@@ -23,10 +23,10 @@ module.exports = async function handler(req,res){
    const homeLambda=Math.max(.2,Math.min(4.5,(h.scored/h.n+a.conceded/a.n)/2));
    const awayLambda=Math.max(.2,Math.min(4.5,(a.scored/a.n+h.conceded/h.n)/2));
    function pois(k,l){let p=Math.exp(-l);for(let i=1;i<=k;i++)p*=l/i;return p}
-   let home=0,draw=0,away=0,total=0;
-   for(let i=0;i<=12;i++)for(let j=0;j<=12;j++){const p=pois(i,homeLambda)*pois(j,awayLambda);total+=p;if(i>j)home+=p;else if(i===j)draw+=p;else away+=p}
+   let home=0,draw=0,away=0,total=0,over25=0,btts=0;
+   for(let i=0;i<=12;i++)for(let j=0;j<=12;j++){const p=pois(i,homeLambda)*pois(j,awayLambda);total+=p;if(i+j>=3)over25+=p;if(i>0&&j>0)btts+=p;if(i>j)home+=p;else if(i===j)draw+=p;else away+=p}
    const ranked=[{selection:'1',probability:home/total},{selection:'X',probability:draw/total},{selection:'2',probability:away/total}].sort((a,b)=>b.probability-a.probability);
-   return {match_id:m.id,league:m.league,match:m.home_team+' – '+m.away_team,starts_at:m.starts_at,status:'model_ready',model_favorite:ranked[0].selection,model_favorite_probability:+ranked[0].probability.toFixed(4),home_games:h.n,away_games:a.n,fair_odds:{home:+(total/home).toFixed(2),draw:+(total/draw).toFixed(2),away:+(total/away).toFixed(2)},expected_goals:{home:+homeLambda.toFixed(2),away:+awayLambda.toFixed(2)},probabilities:{home:+(home/total).toFixed(4),draw:+(draw/total).toFixed(4),away:+(away/total).toFixed(4)}};
+   return {match_id:m.id,league:m.league,match:m.home_team+' – '+m.away_team,starts_at:m.starts_at,status:'model_ready',model_favorite:ranked[0].selection,model_favorite_probability:+ranked[0].probability.toFixed(4),home_games:h.n,away_games:a.n,fair_odds:{home:+(total/home).toFixed(2),draw:+(total/draw).toFixed(2),away:+(total/away).toFixed(2)},expected_goals:{home:+homeLambda.toFixed(2),away:+awayLambda.toFixed(2)},goal_markets:{over_2_5:+(over25/total).toFixed(4),under_2_5:+(1-over25/total).toFixed(4),both_teams_score_yes:+(btts/total).toFixed(4),both_teams_score_no:+(1-btts/total).toFixed(4)},probabilities:{home:+(home/total).toFixed(4),draw:+(draw/total).toFixed(4),away:+(away/total).toFixed(4)}};
   });
   return res.status(200).json({ok:true,model:'poisson_baseline_v1',disclaimer:'Experimental model, not calibrated; fair odds are model-derived, not bookmaker odds; no value assessment; no bets placed or tips published.',completed_matches:history.length,upcoming_analyzed:predictions.length,predictions});
  }catch(e){return res.status(502).json({error:'analysis_failed',detail:String(e.message||e)})}
