@@ -125,35 +125,30 @@ async function showFootballPredictions(){
     card.append(recommendation);
     card.append(node('p','Erwartete Tore: '+p.expected_goals.home+' : '+p.expected_goals.away));
     card.append(node('p','Datengrundlage: '+p.home_games+' Heim- und '+p.away_games+' Auswärtsspiele'));
-    // Compare several markets instead of only displaying the highest 1X2 probability.
+    // Automatic market ranking: no manual odds or market selection needed.
     const markets=[
-     ['1','Heimsieg',p.probabilities.home],['X','Unentschieden',p.probabilities.draw],['2','Auswärtssieg',p.probabilities.away],
-     ['1X','Heim oder Remis',p.probabilities.home+p.probabilities.draw],
-     ['X2','Remis oder Auswärts',p.probabilities.draw+p.probabilities.away],
-     ['12','Kein Remis',p.probabilities.home+p.probabilities.away],
-     ['BTTS','Beide Teams treffen',p.goal_markets?.both_teams_score_yes],
-     ['O25','Über 2,5 Tore',p.goal_markets?.over_2_5]
-    ].filter(x=>Number.isFinite(x[2])&&x[2]>0&&x[2]<1);
+     ['Heimsieg',p.probabilities.home],['Unentschieden',p.probabilities.draw],['Auswärtssieg',p.probabilities.away],
+     ['Doppelte Chance 1X',p.probabilities.home+p.probabilities.draw],
+     ['Doppelte Chance X2',p.probabilities.draw+p.probabilities.away],
+     ['Doppelte Chance 12',p.probabilities.home+p.probabilities.away],
+     ['Beide Teams treffen: Ja',p.goal_markets?.both_teams_score_yes],
+     ['Beide Teams treffen: Nein',p.goal_markets?.both_teams_score_no],
+     ['Über 2,5 Tore',p.goal_markets?.over_2_5],
+     ['Unter 2,5 Tore',p.goal_markets?.under_2_5]
+    ].filter(x=>Number.isFinite(x[1])&&x[1]>0&&x[1]<1).sort((a,b)=>b[1]-a[1]);
     const marketBox=node('div');marketBox.style.cssText='border-top:1px solid #315066;margin-top:14px;padding-top:12px';
-    marketBox.append(node('strong','Marktvergleich · Modell statt Bauchgefühl'));
-    const marketSelect=document.createElement('select');marketSelect.setAttribute('aria-label','Wettmarkt');
-    marketSelect.style.cssText='padding:9px;background:#07131f;color:#eaf5fa;border:1px solid #315066;border-radius:8px;max-width:100%';
-    for(const [key,label] of markets){const option=document.createElement('option');option.value=key;option.textContent=label;marketSelect.append(option)}
-    const quoteInput=document.createElement('input');quoteInput.type='number';quoteInput.min='1.01';quoteInput.step='0.01';quoteInput.placeholder='Buchmacherquote';quoteInput.setAttribute('aria-label','Buchmacherquote');
-    quoteInput.style.cssText='width:145px;padding:9px;background:#07131f;color:#eaf5fa;border:1px solid #315066;border-radius:8px';
-    const marketResult=node('p','','muted');
-    function compareMarket(){
-     const item=markets.find(x=>x[0]===marketSelect.value);if(!item)return;
-     const probability=item[2],fair=1/probability;
-     const quote=Number(quoteInput.value);
-     if(!quoteInput.value||!Number.isFinite(quote)||quote<=1){marketResult.textContent='Modell: '+pct(probability)+' · faire Modellquote '+odd(fair)+'. Buchmacherquote eingeben, um den Unterschied zu prüfen.';return}
-     const implied=1/quote,edge=probability-implied;
-     marketResult.textContent='Modell: '+pct(probability)+' · Quote erfordert '+pct(implied)+' · Differenz '+(edge>=0?'+':'')+(edge*100).toFixed(1).replace('.',',')+' Prozentpunkte. '+(edge>0?'Rechnerisch positiv nach Modell – keine geprüfte Value-Wette.':'Nach diesem Modell kein positiver Quotenvorteil.') ;
-    }
-    marketSelect.addEventListener('change',compareMarket);quoteInput.addEventListener('input',compareMarket);
-    const marketControls=node('div');marketControls.style.cssText='display:flex;gap:8px;flex-wrap:wrap;margin-top:10px';marketControls.append(marketSelect,quoteInput);
-    marketBox.append(marketControls,marketResult,node('p','Nur Poisson-Basis: aktuelle Ausfälle, Form außerhalb der gespeicherten Ergebnisse und Buchmacherquoten werden nicht automatisch abgerufen.','muted'));
-    compareMarket();card.append(marketBox);
+    marketBox.append(node('strong','KI-Marktvergleich · automatisch'));
+    if(markets.length){
+     const best=markets[0];
+     const headline=node('p','Höchste Modellwahrscheinlichkeit: '+best[0]+' · '+pct(best[1]));
+     headline.style.cssText='font-weight:800;color:#5ee0a3;font-size:17px;margin:10px 0';
+     marketBox.append(headline);
+     const alternatives=node('p','Weitere Möglichkeiten: '+markets.slice(1,4).map(x=>x[0]+' '+pct(x[1])).join(' · '),'muted');
+     marketBox.append(alternatives);
+     marketBox.append(node('p',best[1]>=0.7?'Modellwert mindestens 70 % – noch keine geprüfte Empfehlung.':'Kein untersuchter Markt erreicht 70 % Modellwahrscheinlichkeit.','muted'));
+    }else marketBox.append(node('p','Für dieses Spiel liegen keine vollständigen Marktprognosen vor.','muted'));
+    marketBox.append(node('p','Automatische Rangfolge aus dem Poisson-Basismodell. Doppelte Chancen sind naturgemäß oft wahrscheinlicher als Einzelergebnisse. Verletzungen, aktuelle Nachrichten und Buchmacherquoten fehlen; keine Gewinngarantie oder Value-Prüfung.','muted'));
+    card.append(marketBox);
     const testRow=node('div');testRow.style.cssText='display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px';
     const stakeInput=document.createElement('input');stakeInput.type='number';stakeInput.min='0.01';stakeInput.max='10000';stakeInput.step='0.01';stakeInput.value='5';stakeInput.setAttribute('aria-label','Virtueller Einsatz in Euro');stakeInput.style.cssText='width:90px;padding:10px;border-radius:8px;background:#07131f;color:#eaf5fa;border:1px solid #315066';
     const saveButton=node('button','Tipp testen');saveButton.type='button';saveButton.style.cssText='padding:10px 14px;border:0;border-radius:8px;background:#5ee0a3;color:#072018;font-weight:700;cursor:pointer';
