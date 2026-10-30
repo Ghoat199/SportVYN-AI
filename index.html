@@ -175,6 +175,14 @@ async function showWeekFixtures(){
     if(p){
      const pct=v=>(Number(v)*100).toLocaleString('de-DE',{minimumFractionDigits:1,maximumFractionDigits:1})+' %';
      c.append(node('p','1 Heimsieg: '+pct(p.probabilities.home)+' · X Remis: '+pct(p.probabilities.draw)+' · 2 Auswärtssieg: '+pct(p.probabilities.away)));
+     if(p.goal_markets){
+      const gm=p.goal_markets;
+      if(['over_2_5','under_2_5','both_teams_score_yes','both_teams_score_no'].every(k=>Number.isFinite(gm[k])&&gm[k]>=0&&gm[k]<=1)){
+       const heading=node('p','Torprognosen · experimentell');heading.style.cssText='font-weight:700;margin-bottom:4px';c.append(heading);
+       c.append(node('p','Über 2,5 Tore: '+pct(gm.over_2_5)+' · Unter 2,5 Tore: '+pct(gm.under_2_5)));
+       c.append(node('p','Beide Teams treffen – Ja: '+pct(gm.both_teams_score_yes)+' · Nein: '+pct(gm.both_teams_score_no)));
+      }
+     }
      const label=({1:'Heimsieg',X:'Unentschieden',2:'Auswärtssieg'})[p.model_favorite];
      const tip=node('p','Modellfavorit: '+p.model_favorite+' – '+label+' ('+pct(p.model_favorite_probability)+')');
      tip.style.cssText='color:#5ee0a3;font-weight:800';c.append(tip);
