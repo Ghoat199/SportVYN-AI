@@ -4,6 +4,7 @@
 module.exports = async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({error:'method_not_allowed'});
   const secrets = [process.env.SPORTVYN_CRON_SECRET, process.env.CRON_SECRET].filter(Boolean);
+  // Vercel cron supplies CRON_SECRET as a bearer token when configured.
   if (!secrets.length || !secrets.some(secret => req.headers.authorization === 'Bearer ' + secret))
     return res.status(401).json({error:'unauthorized'});
   const base = (process.env.SUPABASE_URL || '').replace(/\/+$/, '').replace(/\/rest\/v1$/, '');
@@ -89,7 +90,8 @@ module.exports = async function handler(req, res) {
         results.push({league:league.name,imported:rows.length,ok:true,source:'football-data.co.uk',historical_only:true});
       }catch(err){console.error('SportVYN historical import '+league.code,err);results.push({league:league.name,ok:false,error:String(err.message||err)});}
     }
-    return res.status(results.some(r=>r.ok)?200:502).json({ok:results.every(r=>r.ok),season,results});
+    res.setHeader('Cache-Control','no-store');
+    return res.status(results.some(r=>r.ok)?200:502).json({ok:results.every(r=>r.ok),season,checked_at:new Date().toISOString(),results});
   } catch(e) {
     console.error('SportVYN import failed:',e);
     return res.status(502).json({error:'import_failed',detail:String(e.message||e)});
