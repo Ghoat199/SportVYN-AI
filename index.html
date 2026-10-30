@@ -170,7 +170,7 @@ async function showWeekFixtures(){
    status.textContent=shown.length+' importierte Spiele'+(selected==='Alle'?' in den nächsten 7 Tagen':' am '+selected.split('-').reverse().join('.'));
    for(const g of shown){
     const c=node('article',undefined,'card');
-    c.append(node('strong',g.match),node('p',g.league+' · '+new Date(g.starts_at).toLocaleString('de-DE',{timeZone:'Europe/Berlin',day:'2-digit',month:'2-digit',hour:'2-digit'})+' Uhr'));
+    c.append(node('strong',g.match),node('p',g.league+' · '+new Date(g.starts_at).toLocaleString('de-DE',{timeZone:'Europe/Berlin',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})+' Uhr'));
     const p=modelById.get(String(g.id));
     if(p){
      const pct=v=>(Number(v)*100).toLocaleString('de-DE',{minimumFractionDigits:1,maximumFractionDigits:1})+' %';
