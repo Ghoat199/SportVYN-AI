@@ -171,7 +171,9 @@ async function showWeekFixtures(){
    for(const g of shown){
     const c=node('article',undefined,'card');
     c.append(node('strong',g.match),node('p',g.league+' · '+new Date(g.starts_at).toLocaleString('de-DE',{timeZone:'Europe/Berlin',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})+' Uhr'));
-    const p=modelById.get(String(g.id));
+    const validation=node('p',g.validation_status==='review_required'?'⚠️ Spielansetzung auffällig – manuelle Prüfung erforderlich.':'Quelle: importierter Spielplan · noch nicht unabhängig bestätigt.','muted');
+    validation.style.cssText='font-size:12px;margin-top:4px';c.append(validation);
+    const p=g.validation_status==='review_required'?null:modelById.get(String(g.id));
     if(p){
      const pct=v=>(Number(v)*100).toLocaleString('de-DE',{minimumFractionDigits:1,maximumFractionDigits:1})+' %';
      c.append(node('p','1 Heimsieg: '+pct(p.probabilities.home)+' · X Remis: '+pct(p.probabilities.draw)+' · 2 Auswärtssieg: '+pct(p.probabilities.away)));
@@ -187,7 +189,7 @@ async function showWeekFixtures(){
      const tip=node('p','Modellfavorit: '+p.model_favorite+' – '+label+' ('+pct(p.model_favorite_probability)+')');
      tip.style.cssText='color:#5ee0a3;font-weight:800';c.append(tip);
      c.append(node('p','Experimentelles Modell, keine Wettempfehlung.','muted'));
-    }else c.append(node('p','1X2-Prognose noch nicht verfügbar: unzureichende oder nicht verifizierte Ergebnisdaten.','muted'));
+    }else c.append(node('p','Prognose derzeit nicht verfügbar: Daten fehlen oder Spielansetzung muss geprüft werden.','muted'));
     games.append(c)
    }
    if(!shown.length)games.append(node('p','Keine importierten Spiele für diese Auswahl.','muted'));
