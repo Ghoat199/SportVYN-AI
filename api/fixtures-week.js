@@ -62,9 +62,14 @@ module.exports=async function handler(req,res){
    return {...g,source_check:'missing_from_current_source',validation_status:'review_required'};
   });
   const sourceSummary={checked_leagues:sourceResults.map(x=>({league:x.league,available:x.ok,feed_entries:x.entries.length,...(x.error?{error:x.error}:{})})),matched:games.filter(g=>g.source_check==='current_source_match').length,review_candidates:games.filter(g=>['date_or_time_changed','missing_from_current_source'].includes(g.source_check)).length,mode:'read_only_no_deletions'};
+  // UEFA competitions have no independent comprehensive verification source yet.
+  // Expose explicit uncertainty; do not equate structural validity with confirmed fixtures.
+  const uefaLeagues=new Set(['Champions League','Europa League','Conference League']);
+  games=games.map(g=>({...g,verification_status:g.independent_check==='sample_match'?'independent_sample_match':uefaLeagues.has(g.league)?'unverified_uefa':g.source_check==='current_source_match'?'matches_import_source':'unverified'}));
+  const verificationSummary={independent_sample_matches:games.filter(g=>g.verification_status==='independent_sample_match').length,uefa_unverified:games.filter(g=>g.verification_status==='unverified_uefa').length,import_source_matches:games.filter(g=>g.verification_status==='matches_import_source').length,other_unverified:games.filter(g=>g.verification_status==='unverified').length};
   // No football-data.org requests: reserve the shared quota for BetValue AI.
   const crosscheck='disabled_to_preserve_quota';
   res.setHeader('Cache-Control','public, s-maxage=300, stale-while-revalidate=600');
-  return res.status(200).json({ok:true,timezone:'Europe/Berlin',days:7,source:'already_imported_only',total:games.length,rejected_invalid_records:rejected,requires_review:games.filter(g=>g.validation_status==='review_required').length,verification:crosscheck,source_reconciliation:sourceSummary,independent_sample:{source:'TheSportsDB',scope:'today_only',returned:sampleEvents.length,matched:games.filter(g=>g.independent_check==='sample_match').length,limited:true,error:sampleError},checked_at:new Date().toISOString(),by_league:games.reduce((acc,g)=>(acc[g.league]=(acc[g.league]||0)+1,acc),{}),games});
+  return res.status(200).json({ok:true,timezone:'Europe/Berlin',days:7,source:'already_imported_only',total:games.length,rejected_invalid_records:rejected,requires_review:games.filter(g=>g.validation_status==='review_required').length,verification:crosscheck,source_reconciliation:sourceSummary,verification_summary:verificationSummary,independent_sample:{source:'TheSportsDB',scope:'today_only',returned:sampleEvents.length,matched:games.filter(g=>g.independent_check==='sample_match').length,limited:true,error:sampleError},checked_at:new Date().toISOString(),by_league:games.reduce((acc,g)=>(acc[g.league]=(acc[g.league]||0)+1,acc),{}),games});
  }catch(e){return res.status(502).json({error:'fixtures_unavailable'})}
 };
