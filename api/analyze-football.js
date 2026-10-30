@@ -6,10 +6,17 @@ module.exports = async function handler(req,res){
  const key=process.env.SUPABASE_SERVICE_ROLE_KEY;
  if(!base||!key)return res.status(503).json({error:'missing_supabase_configuration'});
  try{
-  const response=await fetch(base+'/rest/v1/sportvyn_matches?select=id,league,home_team,away_team,starts_at,status,home_score,away_score&sport=eq.football&league=in.(Bundesliga,2.%20Bundesliga,Premier%20League,La%20Liga)&order=starts_at.asc&limit=1500',{headers:{apikey:key,Authorization:'Bearer '+key},signal:AbortSignal.timeout(12000)});
+  const response=await fetch(base+'/rest/v1/sportvyn_matches?select=id,provider,league,home_team,away_team,starts_at,status,home_score,away_score&sport=eq.football&league=in.(Bundesliga,2.%20Bundesliga,Premier%20League,La%20Liga)&order=starts_at.asc&limit=1500',{headers:{apikey:key,Authorization:'Bearer '+key},signal:AbortSignal.timeout(12000)});
   if(!response.ok)throw Error('database_http_'+response.status);
   const all=await response.json(),now=Date.now();
   const upcoming=all.filter(m=>m.status==='scheduled'&&Date.parse(m.starts_at)>now).slice(0,100);
+  // Only trusted live fixture feeds; reject conflicting same-day league schedules.
+  const counts=new Map();
+  for(const m of upcoming){if(m.provider!=='openligadb'||!m.league||!m.home_team||!m.away_team||m.home_team.trim().toLowerCase()===m.away_team.trim().toLowerCase())continue;
+   const day=new Date(m.starts_at).toISOString().slice(0,10);
+   for(const team of [m.home_team,m.away_team]){const k=m.league+'|'+day+'|'+team.trim().toLowerCase();counts.set(k,(counts.get(k)||0)+1)}
+  }
+  const validUpcoming=upcoming.filter(m=>m.provider==='openligadb'&&m.league&&m.home_team&&m.away_team&&m.home_team.trim().toLowerCase()!==m.away_team.trim().toLowerCase()&&[m.home_team,m.away_team].every(team=>(counts.get(m.league+'|'+new Date(m.starts_at).toISOString().slice(0,10)+'|'+team.trim().toLowerCase())||0)===1));
   const history=all.filter(m=>m.status==='finished'&&Number.isInteger(m.home_score)&&Number.isInteger(m.away_score));
   function rate(team,home,cutoff,league){
    const games=history.filter(m=>m.league===league&&Date.parse(m.starts_at)<cutoff&&(home?m.home_team===team:m.away_team===team)).slice(-8);
@@ -17,7 +24,7 @@ module.exports = async function handler(req,res){
    const conceded=games.reduce((s,m)=>s+(home?m.away_score:m.home_score),0);
    return {n:games.length,scored,conceded};
   }
-  const predictions=upcoming.map(m=>{
+  const predictions=validUpcoming.map(m=>{
    const cutoff=Date.parse(m.starts_at),h=rate(m.home_team,true,cutoff,m.league),a=rate(m.away_team,false,cutoff,m.league);
    if(h.n<3||a.n<3)return {match_id:m.id,league:m.league,match:m.home_team+' – '+m.away_team,starts_at:m.starts_at,status:'insufficient_data',home_games:h.n,away_games:a.n};
    const homeLambda=Math.max(.2,Math.min(4.5,(h.scored/h.n+a.conceded/a.n)/2));
@@ -28,6 +35,6 @@ module.exports = async function handler(req,res){
    const ranked=[{selection:'1',probability:home/total},{selection:'X',probability:draw/total},{selection:'2',probability:away/total}].sort((a,b)=>b.probability-a.probability);
    return {match_id:m.id,league:m.league,match:m.home_team+' – '+m.away_team,starts_at:m.starts_at,status:'model_ready',model_favorite:ranked[0].selection,model_favorite_probability:+ranked[0].probability.toFixed(4),home_games:h.n,away_games:a.n,fair_odds:{home:+(total/home).toFixed(2),draw:+(total/draw).toFixed(2),away:+(total/away).toFixed(2)},expected_goals:{home:+homeLambda.toFixed(2),away:+awayLambda.toFixed(2)},goal_markets:{over_2_5:+(over25/total).toFixed(4),under_2_5:+(1-over25/total).toFixed(4),both_teams_score_yes:+(btts/total).toFixed(4),both_teams_score_no:+(1-btts/total).toFixed(4)},probabilities:{home:+(home/total).toFixed(4),draw:+(draw/total).toFixed(4),away:+(away/total).toFixed(4)}};
   });
-  return res.status(200).json({ok:true,model:'poisson_baseline_v1',disclaimer:'Experimental model, not calibrated; fair odds are model-derived, not bookmaker odds; no value assessment; no bets placed or tips published.',completed_matches:history.length,upcoming_analyzed:predictions.length,predictions});
+  return res.status(200).json({ok:true,model:'poisson_baseline_v1',disclaimer:'Experimental model, not calibrated; fair odds are model-derived, not bookmaker odds; no value assessment; no bets placed or tips published.',completed_matches:history.length,upcoming_analyzed:predictions.length,fixtures_excluded:upcoming.length-validUpcoming.length,fixture_validation:'provider_and_same_day_conflicts_only',predictions});
  }catch(e){return res.status(502).json({error:'analysis_failed',detail:String(e.message||e)})}
 };
