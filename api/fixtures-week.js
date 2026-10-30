@@ -19,9 +19,26 @@ module.exports=async function handler(req,res){
   const counts=new Map();
   for(const m of inWindow){const day=dateFmt.format(new Date(m.starts_at));for(const team of [m.home_team,m.away_team]){const k=m.league+'|'+day+'|'+team.trim().toLowerCase();counts.set(k,(counts.get(k)||0)+1)}}
   let games=inWindow.map(m=>{const day=dateFmt.format(new Date(m.starts_at));const conflict=[m.home_team,m.away_team].some(team=>(counts.get(m.league+'|'+day+'|'+team.trim().toLowerCase())||0)>1);return {id:m.id,league:m.league,match:m.home_team+' – '+m.away_team,starts_at:m.starts_at,date:day,validation_status:conflict?'review_required':'structurally_valid'};});
+  // Optional small independent sample from TheSportsDB free API (maximum three events/day).
+  // Never interpret absence from a truncated sample as evidence that a fixture is wrong.
+  let sampleEvents=[],sampleError=null;
+  try{
+   const d=today;
+   const u='https://www.thesportsdb.com/api/v1/json/123/eventsday.php?d='+encodeURIComponent(d)+'&s=Soccer';
+   const ext=await fetch(u,{signal:AbortSignal.timeout(3500),headers:{Accept:'application/json'}});
+   if(!ext.ok)throw Error('http_'+ext.status);
+   const payload=await ext.json();
+   sampleEvents=(Array.isArray(payload.events)?payload.events:[]).slice(0,3).map(e=>({home:String(e.strHomeTeam||''),away:String(e.strAwayTeam||''),date:String(e.dateEvent||'')}));
+  }catch(e){sampleError=String(e.message||e).slice(0,80)}
+  const norm=s=>String(s||'').normalize('NFKD').replace(/[\\u0300-\\u036f]/g,'').toLowerCase().replace(/\\b(fc|cf|sc|sv|afc|vfl|tsg|fk|club|football|fussball)\\b/g,'').replace(/[^a-z0-9]/g,'');
+  games=games.map(g=>{
+   const [home,away]=g.match.split(' – ');
+   const confirmed=sampleEvents.some(e=>e.date===g.date&&norm(e.home)===norm(home)&&norm(e.away)===norm(away));
+   return {...g,independent_check:confirmed?'sample_match':'not_verified'};
+  });
   // No football-data.org requests: reserve the shared quota for BetValue AI.
   const crosscheck='disabled_to_preserve_quota';
   res.setHeader('Cache-Control','public, s-maxage=300, stale-while-revalidate=600');
-  return res.status(200).json({ok:true,timezone:'Europe/Berlin',days:7,source:'already_imported_only',total:games.length,rejected_invalid_records:rejected,requires_review:games.filter(g=>g.validation_status==='review_required').length,verification:crosscheck,checked_at:new Date().toISOString(),by_league:games.reduce((acc,g)=>(acc[g.league]=(acc[g.league]||0)+1,acc),{}),games});
+  return res.status(200).json({ok:true,timezone:'Europe/Berlin',days:7,source:'already_imported_only',total:games.length,rejected_invalid_records:rejected,requires_review:games.filter(g=>g.validation_status==='review_required').length,verification:crosscheck,independent_sample:{source:'TheSportsDB',scope:'today_only',returned:sampleEvents.length,matched:games.filter(g=>g.independent_check==='sample_match').length,limited:true,error:sampleError},checked_at:new Date().toISOString(),by_league:games.reduce((acc,g)=>(acc[g.league]=(acc[g.league]||0)+1,acc),{}),games});
  }catch(e){return res.status(502).json({error:'fixtures_unavailable'})}
 };
