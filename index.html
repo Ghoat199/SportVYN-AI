@@ -93,8 +93,8 @@ async function showFootballPredictions(){
   dailyCards.replaceChildren();
   const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Berlin',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
   const berlinDate=iso=>new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Berlin',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(iso));
-  const picks=predictions.filter(p=>p.status==='model_ready'&&berlinDate(p.starts_at)===today&&Date.parse(p.starts_at)>Date.now()&&verifiedFixtureIds.has(String(p.match_id))).sort((a,b)=>b.model_favorite_probability-a.model_favorite_probability).slice(0,5);
-  if(!picks.length){dailyCards.append(node('p','Heute keine unabhängig bestätigten Spiele für Modellvorschläge verfügbar. Die experimentellen Analysen bleiben unten sichtbar.','muted'));return}
+  const picks=[]; // Temporarily disable daily picks until independently verified fixture coverage is reliable.
+  if(!picks.length){dailyCards.append(node('p','Tagesvorschläge sind vorübergehend deaktiviert, bis die Spielansetzungen zuverlässig unabhängig bestätigt werden können. Experimentelle Modellanalysen bleiben unten sichtbar.','muted'));return}
   for(const p of picks){
    const c=node('article',undefined,'card');
    c.append(node('strong',p.match),node('p',p.league+' · '+new Date(p.starts_at).toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit',timeZone:'Europe/Berlin'})+' Uhr'));
