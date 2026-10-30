@@ -12,8 +12,14 @@ module.exports=async function handler(req,res){
   if(!r.ok)throw Error('database_http_'+r.status);
   const rows=await r.json(),dateFmt=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Berlin',year:'numeric',month:'2-digit',day:'2-digit'});
   const today=dateFmt.format(start),max=new Date(start.getTime()+6*86400000),last=dateFmt.format(max);
-  const games=rows.filter(m=>{const d=dateFmt.format(new Date(m.starts_at));return d>=today&&d<=last}).map(m=>({id:m.id,league:m.league,match:m.home_team+' – '+m.away_team,starts_at:m.starts_at,date:dateFmt.format(new Date(m.starts_at))}));
+  // Structural checks only; these do not certify that fixtures match official schedules.
+  const valid=rows.filter(m=>m.id!=null&&typeof m.league==='string'&&m.league.trim()&&typeof m.home_team==='string'&&m.home_team.trim()&&typeof m.away_team==='string'&&m.away_team.trim()&&m.home_team.trim().toLowerCase()!==m.away_team.trim().toLowerCase()&&Number.isFinite(Date.parse(m.starts_at)));
+  const rejected=rows.length-valid.length;
+  const inWindow=valid.filter(m=>{const d=dateFmt.format(new Date(m.starts_at));return d>=today&&d<=last});
+  const counts=new Map();
+  for(const m of inWindow){const day=dateFmt.format(new Date(m.starts_at));for(const team of [m.home_team,m.away_team]){const k=m.league+'|'+day+'|'+team.trim().toLowerCase();counts.set(k,(counts.get(k)||0)+1)}}
+  const games=inWindow.map(m=>{const day=dateFmt.format(new Date(m.starts_at));const conflict=[m.home_team,m.away_team].some(team=>(counts.get(m.league+'|'+day+'|'+team.trim().toLowerCase())||0)>1);return {id:m.id,league:m.league,match:m.home_team+' – '+m.away_team,starts_at:m.starts_at,date:day,validation_status:conflict?'review_required':'structurally_valid'};});
   res.setHeader('Cache-Control','no-store');
-  return res.status(200).json({ok:true,timezone:'Europe/Berlin',days:7,source:'already_imported_only',total:games.length,games});
+  return res.status(200).json({ok:true,timezone:'Europe/Berlin',days:7,source:'already_imported_only',total:games.length,rejected_invalid_records:rejected,requires_review:games.filter(g=>g.validation_status==='review_required').length,verification:'structural_only_not_official_schedule',games});
  }catch(e){return res.status(502).json({error:'fixtures_unavailable'})}
 };
