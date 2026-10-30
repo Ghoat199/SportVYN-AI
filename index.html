@@ -163,6 +163,12 @@ async function showWeekFixtures(){
     if(modelData.ok&&Array.isArray(modelData.predictions))modelById=new Map(modelData.predictions.filter(p=>p.status==='model_ready'&&p.probabilities).map(p=>[String(p.match_id),p]));
    }
   }catch(e){console.warn('Fixture predictions unavailable',e)}
+  const summary=data.verification_summary;
+  if(summary){
+   const info=node('p','Quellenprüfung: '+summary.import_source_matches+' Spiele stimmen mit der Importquelle überein · '+summary.uefa_unverified+' UEFA-Spiele unbestätigt · '+summary.other_unverified+' weitere unbestätigt · '+summary.independent_sample_matches+' Stichproben-Treffer (unabhängig).','muted');
+   info.style.cssText='font-size:13px;border-left:3px solid #ffd08b;padding-left:12px';
+   section.insertBefore(info,filters);
+  }
   const dates=[...new Set(data.games.map(g=>g.date))].sort();
   const choices=['Alle',...dates],buttons=[];let selected='Alle';
   function render(){
@@ -171,7 +177,8 @@ async function showWeekFixtures(){
    for(const g of shown){
     const c=node('article',undefined,'card');
     c.append(node('strong',g.match),node('p',g.league+' · '+new Date(g.starts_at).toLocaleString('de-DE',{timeZone:'Europe/Berlin',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})+' Uhr'));
-    const validation=node('p',g.validation_status==='review_required'?'⚠️ Spielansetzung auffällig – manuelle Prüfung erforderlich.':'Quelle: importierter Spielplan · noch nicht unabhängig bestätigt.','muted');
+    const verificationText=g.validation_status==='review_required'?'⚠️ Spielansetzung auffällig – Prüfung erforderlich.':g.verification_status==='independent_sample_match'?'Externe Stichprobe stimmt überein – keine vollständige Bestätigung.':g.verification_status==='matches_import_source'?'Mit aktueller Importquelle abgeglichen – nicht unabhängig bestätigt.':g.verification_status==='unverified_uefa'?'UEFA-Spielansetzung noch nicht unabhängig bestätigt.':'Spielansetzung noch nicht unabhängig bestätigt.';
+    const validation=node('p',verificationText,'muted');
     validation.style.cssText='font-size:12px;margin-top:4px';c.append(validation);
     const p=g.validation_status==='review_required'?null:modelById.get(String(g.id));
     if(p){
