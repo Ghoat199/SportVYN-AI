@@ -18,8 +18,34 @@ module.exports=async function handler(req,res){
   const inWindow=valid.filter(m=>{const d=dateFmt.format(new Date(m.starts_at));return d>=today&&d<=last});
   const counts=new Map();
   for(const m of inWindow){const day=dateFmt.format(new Date(m.starts_at));for(const team of [m.home_team,m.away_team]){const k=m.league+'|'+day+'|'+team.trim().toLowerCase();counts.set(k,(counts.get(k)||0)+1)}}
-  const games=inWindow.map(m=>{const day=dateFmt.format(new Date(m.starts_at));const conflict=[m.home_team,m.away_team].some(team=>(counts.get(m.league+'|'+day+'|'+team.trim().toLowerCase())||0)>1);return {id:m.id,league:m.league,match:m.home_team+' – '+m.away_team,starts_at:m.starts_at,date:day,validation_status:conflict?'review_required':'structurally_valid'};});
+  let games=inWindow.map(m=>{const day=dateFmt.format(new Date(m.starts_at));const conflict=[m.home_team,m.away_team].some(team=>(counts.get(m.league+'|'+day+'|'+team.trim().toLowerCase())||0)>1);return {id:m.id,league:m.league,match:m.home_team+' – '+m.away_team,starts_at:m.starts_at,date:day,validation_status:conflict?'review_required':'structurally_valid'};});
+  // Independent comparison is optional and conservative: unmatched != incorrect.
+  // Requires FOOTBALL_DATA_API_KEY in Vercel. Never expose the token.
+  let crosscheck='not_configured';
+  if(process.env.FOOTBALL_DATA_API_KEY){
+   try{
+    const from=start.toISOString().slice(0,10),to=end.toISOString().slice(0,10);
+    const external=await fetch('https://api.football-data.org/v4/matches?dateFrom='+from+'&dateTo='+to,{headers:{'X-Auth-Token':process.env.FOOTBALL_DATA_API_KEY},signal:AbortSignal.timeout(10000)});
+    if(!external.ok)throw Error('source_http_'+external.status);
+    const payload=await external.json();
+    if(!Array.isArray(payload.matches))throw Error('invalid_source');
+    const normalize=v=>String(v||'').toLowerCase().normalize('NFKD').replace(/[\\u0300-\\u036f]/g,'').replace(/[^a-z0-9]/g,'');
+    const names=new Map([['Bundesliga','BL1'],['2. Bundesliga','BL2'],['Premier League','PL'],['La Liga','PD']]);
+    const known=payload.matches.filter(m=>m.utcDate&&m.homeTeam&&m.awayTeam);
+    games=games.map(g=>{
+     if(g.validation_status==='review_required')return g;
+     const code=names.get(g.league);
+     if(!code)return g;
+     const [home,away]=g.match.split(' – ');
+     const found=known.some(m=>m.competition?.code===code&&Math.abs(Date.parse(m.utcDate)-Date.parse(g.starts_at))<=3*3600000&&
+      [m.homeTeam?.name,m.homeTeam?.shortName].some(n=>normalize(n)===normalize(home))&&
+      [m.awayTeam?.name,m.awayTeam?.shortName].some(n=>normalize(n)===normalize(away)));
+     return {...g,validation_status:found?'independently_matched':'unconfirmed'};
+    });
+    crosscheck='completed_conservative';
+   }catch(e){console.error('Independent fixture comparison unavailable',String(e.message||e));crosscheck='source_unavailable'}
+  }
   res.setHeader('Cache-Control','no-store');
-  return res.status(200).json({ok:true,timezone:'Europe/Berlin',days:7,source:'already_imported_only',total:games.length,rejected_invalid_records:rejected,requires_review:games.filter(g=>g.validation_status==='review_required').length,verification:'structural_only_not_official_schedule',games});
+  return res.status(200).json({ok:true,timezone:'Europe/Berlin',days:7,source:'already_imported_only',total:games.length,rejected_invalid_records:rejected,requires_review:games.filter(g=>g.validation_status==='review_required').length,verification:crosscheck,games});
  }catch(e){return res.status(502).json({error:'fixtures_unavailable'})}
 };
