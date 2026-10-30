@@ -22,6 +22,6 @@ module.exports=async function handler(req,res){
   // No football-data.org requests: reserve the shared quota for BetValue AI.
   const crosscheck='disabled_to_preserve_quota';
   res.setHeader('Cache-Control','public, s-maxage=300, stale-while-revalidate=600');
-  return res.status(200).json({ok:true,timezone:'Europe/Berlin',days:7,source:'already_imported_only',total:games.length,rejected_invalid_records:rejected,requires_review:games.filter(g=>g.validation_status==='review_required').length,verification:crosscheck,games});
+  return res.status(200).json({ok:true,timezone:'Europe/Berlin',days:7,source:'already_imported_only',total:games.length,rejected_invalid_records:rejected,requires_review:games.filter(g=>g.validation_status==='review_required').length,verification:crosscheck,checked_at:new Date().toISOString(),by_league:games.reduce((acc,g)=>(acc[g.league]=(acc[g.league]||0)+1,acc),{}),games});
  }catch(e){return res.status(502).json({error:'fixtures_unavailable'})}
 };
