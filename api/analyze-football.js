@@ -14,6 +14,7 @@ async function backtestHandler(req,res){
   for(const [league,matches] of byLeague){
    let n=0,correct=0,brier=0,baselineCorrect=0,baselineBrier=0,homePred=0,homeActual=0,homeProb=0;
    let holdoutN=0,holdoutCorrect=0,holdoutBrier=0,holdoutBaselineBrier=0;
+   const eligiblePredictions=[];
    const buckets=Array.from({length:5},(_,i)=>({range:(i*20)+'-'+((i+1)*20)+'%',count:0,predicted:0,actual:0}));
    for(let idx=0;idx<matches.length;idx++){
     const target=matches[idx],prior=matches.slice(0,idx).filter(x=>Date.parse(x.starts_at)<Date.parse(target.starts_at));
@@ -42,17 +43,20 @@ async function backtestHandler(req,res){
     n++;correct+=Number(winner===actual);homePred+=Number(winner===0);homeActual+=Number(actual===0);homeProb+=probs[0];
     brier+=probs.reduce((sum,p,i)=>sum+(p-Number(i===actual))**2,0);
     // Strictly chronological final 30% holdout; no model selection is performed here.
-    if(idx>=Math.floor(matches.length*.7)){
-     holdoutN++;holdoutCorrect+=Number(winner===actual);
-     holdoutBrier+=probs.reduce((sum,p,i)=>sum+(p-Number(i===actual))**2,0);
-     holdoutBaselineBrier+=baseline.reduce((sum,p,i)=>sum+(p-Number(i===actual))**2,0);
-    }
+    eligiblePredictions.push({winner,actual,probs,baseline});
     const bucket=buckets[Math.min(4,Math.floor(probs[0]*5))];bucket.count++;bucket.predicted+=probs[0];bucket.actual+=Number(actual===0);
+   }
+   // Hold out the last 30% of eligible chronological predictions, not raw fixtures.
+   const holdoutStart=Math.floor(eligiblePredictions.length*.7);
+   for(const p of eligiblePredictions.slice(holdoutStart)){
+    holdoutN++;holdoutCorrect+=Number(p.winner===p.actual);
+    holdoutBrier+=p.probs.reduce((sum,v,i)=>sum+(v-Number(i===p.actual))**2,0);
+    holdoutBaselineBrier+=p.baseline.reduce((sum,v,i)=>sum+(v-Number(i===p.actual))**2,0);
    }
    if(n)summaries.push({league,sample:n,holdout:{sample:holdoutN,accuracy:holdoutN?+(holdoutCorrect/holdoutN).toFixed(4):null,brier_score:holdoutN?+(holdoutBrier/holdoutN).toFixed(4):null,baseline_brier_score:holdoutN?+(holdoutBaselineBrier/holdoutN).toFixed(4):null},accuracy:+(correct/n).toFixed(4),brier_score:+(brier/n).toFixed(4),baseline_accuracy:+(baselineCorrect/n).toFixed(4),baseline_brier_score:+(baselineBrier/n).toFixed(4),brier_improvement_vs_baseline:+((baselineBrier-brier)/n).toFixed(4),predicted_home_favorite_share:+(homePred/n).toFixed(4),actual_home_win_share:+(homeActual/n).toFixed(4),mean_predicted_home_win_probability:+(homeProb/n).toFixed(4),home_calibration:buckets.filter(b=>b.count).map(b=>({range:b.range,count:b.count,mean_predicted:+(b.predicted/b.count).toFixed(4),actual_home_win_rate:+(b.actual/b.count).toFixed(4)}))});
   }
   res.setHeader('Cache-Control','public, s-maxage=3600');
-  return res.status(200).json({ok:true,model:'poisson_form_blend_v1_5_holdout_diagnostics',method:'walk_forward_no_future_results',note:'Diagnostic only; baseline uses historical league outcome frequencies available before each match. Lower Brier score is better. No demonstrated betting edge.',total_finished_rows:rows.length,leagues:summaries});
+  return res.status(200).json({ok:true,model:'poisson_form_blend_v1_5_1_holdout_fix',method:'walk_forward_no_future_results',note:'Diagnostic only; baseline uses historical league outcome frequencies available before each match. Lower Brier score is better. No demonstrated betting edge.',total_finished_rows:rows.length,leagues:summaries});
  }catch(e){return res.status(502).json({error:'backtest_failed',detail:String(e.message||e)})}
 };
 // SportVYN AI: transparent, deterministic league-separated multi-league baseline model.
