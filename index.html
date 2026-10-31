@@ -84,7 +84,7 @@ async function showFootballPredictions(){
  const state=node('p','Prognosen werden geladen …','muted');
  const cards=node('div');cards.style.cssText='display:grid;gap:12px';
  const historyHeading=node('h3','Meine virtuellen Tipp-Tests');const historyNote=node('p','Nur Testeinsätze, kein Echtgeld. Die Einträge werden ausschließlich im Browser dieses Geräts gespeichert und nicht automatisch mit den offiziellen Modellstatistiken abgeglichen.','muted');const history=node('div');history.id='virtual-tip-history';history.style.cssText='display:grid;gap:10px';
- const dailyHeading=node('h3','Tipps des Tages · Modellvorschläge');const dailyNote=node('p','Automatische Marktprognosen für heutige Spiele aus vorhandenen Daten. Ungeprüfte Ansetzungen werden gekennzeichnet. Keine geprüften Value-Wetten.','muted');const dailyCards=node('div');dailyCards.style.cssText='display:grid;gap:10px';section.append(dailyHeading,dailyNote,dailyCards,heading,note,filters,state,cards,historyHeading,historyNote,history);panel.append(section);renderVirtualTips();
+ const dailyHeading=node('h3','Tipps des Tages · Modellvorschläge');const dailyNote=node('p','Tagesprognosen nur für unabhängig stichprobengeprüfte Spielansetzungen. Modellwahrscheinlichkeiten sind keine geprüften Value-Wetten.','muted');const dailyCards=node('div');dailyCards.style.cssText='display:grid;gap:10px';section.append(dailyHeading,dailyNote,dailyCards,heading,note,filters,state,cards,historyHeading,historyNote,history);panel.append(section);renderVirtualTips();
  let selected='Bundesliga',predictions=[];
  let verifiedFixtureIds=new Set();
  const pct=n=>(100*n).toLocaleString('de-DE',{maximumFractionDigits:1,minimumFractionDigits:1})+' %';
@@ -93,9 +93,9 @@ async function showFootballPredictions(){
   dailyCards.replaceChildren();
   const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Berlin',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
   const berlinDate=iso=>new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Berlin',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(iso));
-  const todayReady=predictions.filter(p=>p.status==='model_ready'&&p.probabilities&&berlinDate(p.starts_at)===today);
+  const todayReady=predictions.filter(p=>p.status==='model_ready'&&p.probabilities&&verifiedFixtureIds.has(String(p.match_id))&&berlinDate(p.starts_at)===today);
   const picks=todayReady.sort((a,b)=>Date.parse(a.starts_at)-Date.parse(b.starts_at)).slice(0,8);
-  if(!picks.length){dailyCards.append(node('p','Heute liegen keine berechenbaren Modellprognosen vor. Die kommenden Spiele und verfügbaren Analysen findest du weiter unten.','muted'));return}
+  if(!picks.length){dailyCards.append(node('p','Heute gibt es keine unabhängig bestätigten Spiele mit berechenbaren Modellprognosen. Unbestätigte Spiele werden nicht als Tagesvorschläge angezeigt. Weitere experimentelle Analysen findest du unten.','muted'));return}
   for(const p of picks){
    const c=node('article',undefined,'card');
    c.append(node('strong',p.match),node('p',p.league+' · '+new Date(p.starts_at).toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit',timeZone:'Europe/Berlin'})+' Uhr'));
