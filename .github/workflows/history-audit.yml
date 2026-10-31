@@ -1,0 +1,30 @@
+name: SportVYN history audit
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Preview historical matches
+        run: node scripts/preview-history-import.mjs 2024 2025 > history-preview.json
+      - name: Audit database fields
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: node scripts/audit-history-schema.mjs > history-schema.json
+      - name: Upload audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sportvyn-history-audit
+          path: |
+            history-preview.json
+            history-schema.json
+          if-no-files-found: warn
