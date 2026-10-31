@@ -18,23 +18,40 @@ module.exports = async function handler(req,res){
   }
   const validUpcoming=upcoming.filter(m=>m.provider==='openligadb'&&m.league&&m.home_team&&m.away_team&&m.home_team.trim().toLowerCase()!==m.away_team.trim().toLowerCase()&&[m.home_team,m.away_team].every(team=>(counts.get(m.league+'|'+new Date(m.starts_at).toISOString().slice(0,10)+'|'+team.trim().toLowerCase())||0)===1));
   const history=all.filter(m=>m.status==='finished'&&Number.isInteger(m.home_score)&&Number.isInteger(m.away_score));
+  // V1.2: use recent overall form alongside venue-specific form; shrink small samples.
   function rate(team,home,cutoff,league){
-   const games=history.filter(m=>m.league===league&&Date.parse(m.starts_at)<cutoff&&(home?m.home_team===team:m.away_team===team)).slice(-8);
-   const scored=games.reduce((s,m)=>s+(home?m.home_score:m.away_score),0);
-   const conceded=games.reduce((s,m)=>s+(home?m.away_score:m.home_score),0);
-   return {n:games.length,scored,conceded};
+   const matches=history.filter(m=>m.league===league&&Date.parse(m.starts_at)<cutoff&&(m.home_team===team||m.away_team===team)).sort((x,y)=>Date.parse(y.starts_at)-Date.parse(x.starts_at));
+   const overall=matches.slice(0,10);
+   const venue=matches.filter(m=>(home?m.home_team:m.away_team)===team).slice(0,8);
+   function avg(items){
+    if(!items.length)return {n:0,scored:0,conceded:0};
+    let scored=0,conceded=0,weights=0;
+    items.forEach((m,i)=>{const w=Math.pow(.92,i),isHome=m.home_team===team;scored+=w*(isHome?m.home_score:m.away_score);conceded+=w*(isHome?m.away_score:m.home_score);weights+=w});
+    return {n:items.length,scored:scored/weights,conceded:conceded/weights};
+   }
+   return {overall:avg(overall),venue:avg(venue)};
   }
   const predictions=validUpcoming.map(m=>{
    const cutoff=Date.parse(m.starts_at),h=rate(m.home_team,true,cutoff,m.league),a=rate(m.away_team,false,cutoff,m.league);
-   if(h.n<3||a.n<3)return {match_id:m.id,league:m.league,match:m.home_team+' – '+m.away_team,starts_at:m.starts_at,status:'insufficient_data',home_games:h.n,away_games:a.n};
-   const homeLambda=Math.max(.2,Math.min(4.5,(h.scored/h.n+a.conceded/a.n)/2));
-   const awayLambda=Math.max(.2,Math.min(4.5,(a.scored/a.n+h.conceded/h.n)/2));
+   const baseInfo={match_id:m.id,league:m.league,match:m.home_team+' – '+m.away_team,starts_at:m.starts_at,home_games:h.venue.n,away_games:a.venue.n,home_recent_games:h.overall.n,away_recent_games:a.overall.n};
+   if(h.overall.n<5||a.overall.n<5||h.venue.n<3||a.venue.n<3)return {...baseInfo,status:'insufficient_data'};
+   const prior=history.filter(x=>x.league===m.league&&Date.parse(x.starts_at)<cutoff).slice(-200);
+   if(prior.length<20)return {...baseInfo,status:'insufficient_data'};
+   const leagueHome=prior.reduce((sum,x)=>sum+x.home_score,0)/prior.length;
+   const leagueAway=prior.reduce((sum,x)=>sum+x.away_score,0)/prior.length;
+   const blend=(x,y)=>.55*x+.45*y;
+   const homeAttack=blend(h.venue.scored,h.overall.scored),homeDefense=blend(h.venue.conceded,h.overall.conceded);
+   const awayAttack=blend(a.venue.scored,a.overall.scored),awayDefense=blend(a.venue.conceded,a.overall.conceded);
+   // League priors prevent a handful of extreme scorelines from dominating.
+   const homeLambda=Math.max(.2,Math.min(4.5,(homeAttack+awayDefense+leagueHome)/3));
+   const awayLambda=Math.max(.2,Math.min(4.5,(awayAttack+homeDefense+leagueAway)/3));
+   const confidence=h.overall.n>=10&&a.overall.n>=10&&h.venue.n>=6&&a.venue.n>=6?'moderate':'low';
    function pois(k,l){let p=Math.exp(-l);for(let i=1;i<=k;i++)p*=l/i;return p}
    let home=0,draw=0,away=0,total=0,over25=0,btts=0;
    for(let i=0;i<=12;i++)for(let j=0;j<=12;j++){const p=pois(i,homeLambda)*pois(j,awayLambda);total+=p;if(i+j>=3)over25+=p;if(i>0&&j>0)btts+=p;if(i>j)home+=p;else if(i===j)draw+=p;else away+=p}
    const ranked=[{selection:'1',probability:home/total},{selection:'X',probability:draw/total},{selection:'2',probability:away/total}].sort((a,b)=>b.probability-a.probability);
-   return {match_id:m.id,league:m.league,match:m.home_team+' – '+m.away_team,starts_at:m.starts_at,status:'model_ready',model_favorite:ranked[0].selection,model_favorite_probability:+ranked[0].probability.toFixed(4),home_games:h.n,away_games:a.n,fair_odds:{home:+(total/home).toFixed(2),draw:+(total/draw).toFixed(2),away:+(total/away).toFixed(2)},expected_goals:{home:+homeLambda.toFixed(2),away:+awayLambda.toFixed(2)},goal_markets:{over_2_5:+(over25/total).toFixed(4),under_2_5:+(1-over25/total).toFixed(4),both_teams_score_yes:+(btts/total).toFixed(4),both_teams_score_no:+(1-btts/total).toFixed(4)},probabilities:{home:+(home/total).toFixed(4),draw:+(draw/total).toFixed(4),away:+(away/total).toFixed(4)}};
+   return {...baseInfo,status:'model_ready',confidence,model_favorite:ranked[0].selection,model_favorite_probability:+ranked[0].probability.toFixed(4),fair_odds:{home:+(total/home).toFixed(2),draw:+(total/draw).toFixed(2),away:+(total/away).toFixed(2)},expected_goals:{home:+homeLambda.toFixed(2),away:+awayLambda.toFixed(2)},goal_markets:{over_2_5:+(over25/total).toFixed(4),under_2_5:+(1-over25/total).toFixed(4),both_teams_score_yes:+(btts/total).toFixed(4),both_teams_score_no:+(1-btts/total).toFixed(4)},probabilities:{home:+(home/total).toFixed(4),draw:+(draw/total).toFixed(4),away:+(away/total).toFixed(4)}};
   });
-  return res.status(200).json({ok:true,model:'poisson_baseline_v1',disclaimer:'Experimental model, not calibrated; fair odds are model-derived, not bookmaker odds; no value assessment; no bets placed or tips published.',completed_matches:history.length,upcoming_analyzed:predictions.length,fixtures_excluded:upcoming.length-validUpcoming.length,fixture_validation:'provider_and_same_day_conflicts_only',predictions});
+  return res.status(200).json({ok:true,model:'poisson_form_blend_v1_2',disclaimer:'Experimental model, not calibrated; fair odds are model-derived, not bookmaker odds; no value assessment; no bets placed or tips published.',completed_matches:history.length,upcoming_analyzed:predictions.length,fixtures_excluded:upcoming.length-validUpcoming.length,fixture_validation:'provider_and_same_day_conflicts_only',predictions});
  }catch(e){return res.status(502).json({error:'analysis_failed',detail:String(e.message||e)})}
 };
