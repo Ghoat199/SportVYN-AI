@@ -84,7 +84,7 @@ async function showFootballPredictions(){
  const state=node('p','Prognosen werden geladen …','muted');
  const cards=node('div');cards.style.cssText='display:grid;gap:12px';
  const historyHeading=node('h3','Meine virtuellen Tipp-Tests');const historyNote=node('p','Nur Testeinsätze, kein Echtgeld. Die Einträge werden ausschließlich im Browser dieses Geräts gespeichert und nicht automatisch mit den offiziellen Modellstatistiken abgeglichen.','muted');const history=node('div');history.id='virtual-tip-history';history.style.cssText='display:grid;gap:10px';
- const dailyHeading=node('h3','Tipps des Tages · Modellvorschläge');const dailyNote=node('p','Tagesprognosen nur für unabhängig stichprobengeprüfte Spielansetzungen. Modellwahrscheinlichkeiten sind keine geprüften Value-Wetten.','muted');const dailyCards=node('div');dailyCards.style.cssText='display:grid;gap:10px';section.append(dailyHeading,dailyNote,dailyCards,heading,note,filters,state,cards,historyHeading,historyNote,history);panel.append(section);renderVirtualTips();
+ const dailyHeading=node('h3','Tipps des Tages · Modellvorschläge');const dailyNote=node('p','Tagesprognosen für Spielansetzungen mit erfolgreichem Abgleich gegen eine externe Spielplandatenquelle. Keine geprüften Value-Wetten.','muted');const dailyCards=node('div');dailyCards.style.cssText='display:grid;gap:10px';section.append(dailyHeading,dailyNote,dailyCards,heading,note,filters,state,cards,historyHeading,historyNote,history);panel.append(section);renderVirtualTips();
  let selected='Bundesliga',predictions=[];
  let verifiedFixtureIds=new Set();
  const pct=n=>(100*n).toLocaleString('de-DE',{maximumFractionDigits:1,minimumFractionDigits:1})+' %';
@@ -95,7 +95,7 @@ async function showFootballPredictions(){
   const berlinDate=iso=>new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Berlin',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(iso));
   const todayReady=predictions.filter(p=>p.status==='model_ready'&&p.probabilities&&verifiedFixtureIds.has(String(p.match_id))&&berlinDate(p.starts_at)===today);
   const picks=todayReady.sort((a,b)=>Date.parse(a.starts_at)-Date.parse(b.starts_at)).slice(0,8);
-  if(!picks.length){dailyCards.append(node('p','Heute gibt es keine unabhängig bestätigten Spiele mit berechenbaren Modellprognosen. Unbestätigte Spiele werden nicht als Tagesvorschläge angezeigt. Weitere experimentelle Analysen findest du unten.','muted'));return}
+  if(!picks.length){dailyCards.append(node('p','Heute gibt es keine mit externen Spielplandaten abgeglichenen Spiele mit berechenbaren Modellprognosen. Unbestätigte Spiele werden nicht als Tagesvorschläge angezeigt. Weitere experimentelle Analysen findest du unten.','muted'));return}
   for(const p of picks){
    const c=node('article',undefined,'card');
    c.append(node('strong',p.match),node('p',p.league+' · '+new Date(p.starts_at).toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit',timeZone:'Europe/Berlin'})+' Uhr'));
@@ -111,7 +111,7 @@ async function showFootballPredictions(){
    if(!marketOptions.length)continue;
    const pick=node('p','Höchste Modellwahrscheinlichkeit: '+marketOptions[0][0]+' · '+pct(marketOptions[0][1]));pick.style.cssText='font-weight:800;color:#5ee0a3';c.append(pick);
    c.append(node('p','Alternativen: '+marketOptions.slice(1,3).map(x=>x[0]+' '+pct(x[1])).join(' · '),'muted'));
-   c.append(node('p',verifiedFixtureIds.has(String(p.match_id))?'Spielansetzung unabhängig stichprobengeprüft.':'Spielansetzung nicht unabhängig bestätigt. Prognose nur experimentell.','muted'));
+   c.append(node('p',verifiedFixtureIds.has(String(p.match_id))?'Spielansetzung mit externer Spielplandatenquelle abgeglichen.':'Spielansetzung nicht unabhängig bestätigt. Prognose nur experimentell.','muted'));
    const row=node('div');row.style.cssText='display:flex;gap:8px;align-items:center;flex-wrap:wrap';
    const amount=document.createElement('input');amount.type='number';amount.min='0.01';amount.max='10000';amount.step='0.01';amount.value='5';amount.setAttribute('aria-label','Virtueller Einsatz in Euro');amount.style.cssText='width:90px;padding:10px;border-radius:8px;background:#07131f;color:#eaf5fa;border:1px solid #315066';
    const btn=node('button','Tipp testen');btn.type='button';const msg=node('p','','muted');msg.setAttribute('role','status');btn.addEventListener('click',()=>saveVirtualTip(p,amount.value,msg));
@@ -184,7 +184,7 @@ async function showFootballPredictions(){
    if(verificationResponse.ok){
     const fixtureData=await verificationResponse.json();
     if(fixtureData.ok&&Array.isArray(fixtureData.games)){
-     verifiedFixtureIds=new Set(fixtureData.games.filter(g=>g.verification_status==='independent_sample_match'&&g.validation_status!=='review_required').map(g=>String(g.id)));
+     verifiedFixtureIds=new Set(fixtureData.games.filter(g=>['independent_sample_match','matches_import_source'].includes(g.verification_status)&&g.validation_status!=='review_required').map(g=>String(g.id)));
     }
    }
   }catch(e){console.warn('Fixture verification unavailable; show predictions with unverified warning',e)}
