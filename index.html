@@ -104,7 +104,7 @@ async function showFootballPredictions(){
    const doubleChance=bestOf([['1X',p.probabilities.home+p.probabilities.draw],['X2',p.probabilities.draw+p.probabilities.away],['12',p.probabilities.home+p.probabilities.away]]);
    const goals=bestOf([['Beide treffen: Ja',p.goal_markets?.both_teams_score_yes],['Beide treffen: Nein',p.goal_markets?.both_teams_score_no],['Über 2,5 Tore',p.goal_markets?.over_2_5],['Unter 2,5 Tore',p.goal_markets?.under_2_5]]);
    if(!result)continue;
-   const pick=node('p','1X2-Prognose: '+result[0]+' · '+pct(result[1]));pick.style.cssText='font-weight:800;color:#5ee0a3';c.append(pick);
+   const pick=node('p','1X2-Modellwerte: Heimsieg '+pct(p.probabilities.home)+' · Unentschieden '+pct(p.probabilities.draw)+' · Auswärtssieg '+pct(p.probabilities.away));pick.style.cssText='font-weight:800;color:#5ee0a3';c.append(pick);c.append(node('p','Höchster 1X2-Wert: '+result[0]+' · '+pct(result[1])+' (kein geprüfter Tipp)','muted'));if(p.expected_goals)c.append(node('p','Erwartete Tore: '+p.expected_goals.home+' : '+p.expected_goals.away+' · Datengrundlage: '+p.home_games+' Heim- / '+p.away_games+' Auswärtsspiele','muted'));
    if(doubleChance)c.append(node('p','Doppelte Chance: '+doubleChance[0]+' · '+pct(doubleChance[1])));
    if(goals)c.append(node('p','Torprognose: '+goals[0]+' · '+pct(goals[1])));
    c.append(node('p','Das sind getrennte Modellwahrscheinlichkeiten, keine nach Quote geprüften Wettempfehlungen.','muted'));
