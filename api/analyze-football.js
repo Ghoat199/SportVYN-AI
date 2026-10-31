@@ -7,7 +7,8 @@ async function backtestHandler(req,res){
   const q=new URLSearchParams({select:'id,league,home_team,away_team,starts_at,status,home_score,away_score',sport:'eq.football',status:'eq.finished',order:'starts_at.asc',limit:'3000'});
   const r=await fetch(base+'/rest/v1/sportvyn_matches?'+q,{headers:{apikey:key,Authorization:'Bearer '+key},signal:AbortSignal.timeout(12000)});
   if(!r.ok)throw Error('database_http_'+r.status);
-  const rows=(await r.json()).filter(m=>m.league&&m.home_team&&m.away_team&&Number.isFinite(Date.parse(m.starts_at))&&Number.isInteger(m.home_score)&&Number.isInteger(m.away_score));
+  const fetched=await r.json();
+  const rows=fetched.filter(m=>m.league&&m.home_team&&m.away_team&&Number.isFinite(Date.parse(m.starts_at))&&Number.isInteger(m.home_score)&&Number.isInteger(m.away_score));
   const byLeague=new Map();for(const m of rows){if(!byLeague.has(m.league))byLeague.set(m.league,[]);byLeague.get(m.league).push(m)}
   const pois=(k,l)=>{let p=Math.exp(-l);for(let i=1;i<=k;i++)p*=l/i;return p};
   const summaries=[];
@@ -56,7 +57,7 @@ async function backtestHandler(req,res){
    if(n)summaries.push({league,sample:n,holdout:{sample:holdoutN,accuracy:holdoutN?+(holdoutCorrect/holdoutN).toFixed(4):null,brier_score:holdoutN?+(holdoutBrier/holdoutN).toFixed(4):null,baseline_brier_score:holdoutN?+(holdoutBaselineBrier/holdoutN).toFixed(4):null},accuracy:+(correct/n).toFixed(4),brier_score:+(brier/n).toFixed(4),baseline_accuracy:+(baselineCorrect/n).toFixed(4),baseline_brier_score:+(baselineBrier/n).toFixed(4),brier_improvement_vs_baseline:+((baselineBrier-brier)/n).toFixed(4),predicted_home_favorite_share:+(homePred/n).toFixed(4),actual_home_win_share:+(homeActual/n).toFixed(4),mean_predicted_home_win_probability:+(homeProb/n).toFixed(4),home_calibration:buckets.filter(b=>b.count).map(b=>({range:b.range,count:b.count,mean_predicted:+(b.predicted/b.count).toFixed(4),actual_home_win_rate:+(b.actual/b.count).toFixed(4)}))});
   }
   res.setHeader('Cache-Control','public, s-maxage=3600');
-  return res.status(200).json({ok:true,model:'poisson_form_blend_v1_5_1_holdout_fix',method:'walk_forward_no_future_results',note:'Diagnostic only; baseline uses historical league outcome frequencies available before each match. Lower Brier score is better. No demonstrated betting edge.',total_finished_rows:rows.length,leagues:summaries});
+  return res.status(200).json({ok:true,model:'poisson_form_blend_v1_6_coverage_diagnostics',method:'walk_forward_no_future_results',note:'Diagnostic only; baseline uses historical league outcome frequencies available before each match. Lower Brier score is better. No demonstrated betting edge.',total_finished_rows:rows.length,data_coverage:{fetched_rows:fetched.length,valid_finished_rows:rows.length,query_limit:3000,may_be_truncated:fetched.length===3000,leagues_with_eligible_predictions:summaries.length,eligible_predictions:summaries.reduce((sum,x)=>sum+x.sample,0),holdout_predictions:summaries.reduce((sum,x)=>sum+x.holdout.sample,0),note:'Coverage is limited to existing stored results; this endpoint does not import additional historical matches.'},leagues:summaries});
  }catch(e){return res.status(502).json({error:'backtest_failed',detail:String(e.message||e)})}
 };
 // SportVYN AI: transparent, deterministic league-separated multi-league baseline model.
