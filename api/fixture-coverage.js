@@ -20,6 +20,21 @@ const publishedPredictionsHandler = async function publishedPredictionsHandler(r
     const matchIds = [...new Set(analyses.map(a => a.match_id).filter(v => /^[a-zA-Z0-9-]+$/.test(String(v))))];
     if (!matchIds.length) return res.status(200).json({ schema_version: '1.0', generated_at: new Date().toISOString(), predictions: [] });
     const matches = await read('sportvyn_matches?select=id,provider_match_id,sport,league,home_team,away_team,starts_at&id=in.(' + matchIds.join(',') + ')');
+    // Read only saved, historical model forecasts; never recompute or invent 1X2 values.
+    let forecastByMatch = new Map();
+    try {
+      const forecasts = await read('sportvyn_model_forecasts?select=match_id,home_probability,draw_probability,away_probability,predicted_at&match_id=in.(' + matchIds.join(',') + ')&order=predicted_at.desc&limit=500');
+      for (const f of forecasts) {
+        const id = String(f.match_id);
+        if (forecastByMatch.has(id)) continue;
+        const vals = [f.home_probability, f.draw_probability, f.away_probability];
+        if (vals.some(v => v === null || v === undefined || v === '')) continue;
+        const numbers = vals.map(Number);
+        if (numbers.every(v => Number.isFinite(v) && v >= 0 && v <= 1) && Math.abs(numbers.reduce((a,b)=>a+b,0)-1)<0.03) {
+          forecastByMatch.set(id,{home:numbers[0],draw:numbers[1],away:numbers[2]});
+        }
+      }
+    } catch(e) { console.warn('Optional 1X2 forecast read unavailable:',e.message); }
     const matchById = new Map(matches.map(m => [String(m.id), m]));
     const analysisById = new Map(analyses.map(a => [String(a.id), a]));
     const predictions = tips.flatMap(t => {
@@ -35,6 +50,7 @@ const publishedPredictionsHandler = async function publishedPredictionsHandler(r
         sport: m.sport, league: m.league, provider_match_id: m.provider_match_id,
         home_team: m.home_team, away_team: m.away_team, starts_at: m.starts_at,
         market: a.market, selection: a.selection, model_probability: p,
+        probabilities_1x2: m.sport === 'football' ? (forecastByMatch.get(String(m.id)) || null) : null,
         published_at: t.published_at
       }];
     });
