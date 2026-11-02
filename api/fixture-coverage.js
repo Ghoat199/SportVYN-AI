@@ -62,9 +62,30 @@ const publishedPredictionsHandler = async function publishedPredictionsHandler(r
   }
 };
 
+// Public live schedule fallback. Fixtures only: never fabricate model predictions.
+async function publicScheduleHandler(req,res){
+ if(req.method!=='GET')return res.status(405).json({error:'method_not_allowed'});
+ const now=new Date(),until=new Date(now.getTime()+7*86400000);
+ const season=now.getUTCMonth()>=6?now.getUTCFullYear():now.getUTCFullYear()-1;
+ const leagues=[['bl1','Bundesliga'],['bl2','2. Bundesliga'],['bl3','3. Liga']];
+ const results=await Promise.all(leagues.map(async([code,league])=>{
+  try{
+   const response=await fetch('https://api.openligadb.de/getmatchdata/'+code+'/'+season,{signal:AbortSignal.timeout(9000),headers:{Accept:'application/json'}});
+   if(!response.ok)throw Error('http_'+response.status);
+   const matches=await response.json();
+   if(!Array.isArray(matches))throw Error('invalid_response');
+   return {league,ok:true,games:matches.filter(m=>m.team1?.teamName&&m.team2?.teamName&&m.matchDateTimeUTC&&!m.matchIsFinished&&Date.parse(m.matchDateTimeUTC)>now.getTime()&&Date.parse(m.matchDateTimeUTC)<=until.getTime()).map(m=>({id:'openliga-'+code+'-'+m.matchID,league,match:m.team1.teamName+' – '+m.team2.teamName,starts_at:new Date(m.matchDateTimeUTC).toISOString(),verification_status:'matches_import_source',validation_status:'structurally_valid'}))};
+  }catch(e){return {league,ok:false,games:[]}}
+ }));
+ const games=results.flatMap(r=>r.games).sort((a,b)=>Date.parse(a.starts_at)-Date.parse(b.starts_at));
+ res.setHeader('Cache-Control','public, s-maxage=300, stale-while-revalidate=600');
+ return res.status(200).json({ok:true,source:'OpenLigaDB',days:7,total:games.length,checked_at:new Date().toISOString(),available_leagues:results.filter(r=>r.ok).map(r=>r.league),unavailable_leagues:results.filter(r=>!r.ok).map(r=>r.league),games});
+}
+
 // Public fixture coverage summary, read-only. No keys or secrets in response.
 module.exports=async function handler(req,res){
  if(req.query && req.query.mode==='published-predictions') return publishedPredictionsHandler(req,res);
+ if(req.query && req.query.mode==='public-schedule') return publicScheduleHandler(req,res);
  if(req.method!=='GET')return res.status(405).json({error:'method_not_allowed'});
  const base=(process.env.SUPABASE_URL||'').replace(/\/+$/,'').replace(/\/rest\/v1$/,'');
  const key=process.env.SUPABASE_SERVICE_ROLE_KEY;
