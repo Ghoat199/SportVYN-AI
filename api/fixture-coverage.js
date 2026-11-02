@@ -1,8 +1,8 @@
 const publishedPredictionsHandler = async function publishedPredictionsHandler(req, res) {
   res.setHeader('Cache-Control', 'public, max-age=0, s-maxage=300');
   if (req.method !== 'GET') return res.status(405).json({ error: 'method_not_allowed' });
-  const base = (process.env.SUPABASE_URL || '').replace(/\/+$/, '').replace(/\/rest\/v1$/, '');
-  const key = process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_PUBLISHABLE_KEY;
+  const base = (process.env.SUPABASE_URL || process.env.SPORTIQ_STATS_SUPABASE_URL || '').replace(/\/+$/, '').replace(/\/rest\/v1$/, '');
+  const key = process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_PUBLISHABLE_KEY || process.env.SPORTIQ_STATS_ANON_KEY;
   if (!base || !key) return res.status(503).json({ error: 'public_feed_not_configured' });
   const headers = { apikey: key, Authorization: 'Bearer ' + key, Accept: 'application/json' };
   async function read(path) {
