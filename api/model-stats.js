@@ -6,7 +6,7 @@ async function sportiqDiagnostics(req,res){
  if(req.method!=='GET')return res.status(405).json({error:'method_not_allowed'});
  const base=(process.env.SPORTIQ_STATS_SUPABASE_URL||process.env.SUPABASE_URL||'').replace(/\/+$/,'').replace(/\/rest\/v1$/,'');
  const key=process.env.SPORTIQ_STATS_ANON_KEY||process.env.SUPABASE_ANON_KEY;
- if(!base||!key)return res.status(503).json({ok:false,error:'sportiq_stats_not_configured'});
+ if(!base||!key)return res.status(503).json({ok:false,error:'sportiq_stats_not_configured',configuration:{url_present:Boolean(base),anon_key_present:Boolean(key)},hint:'Set SPORTIQ_STATS_SUPABASE_URL and SPORTIQ_STATS_ANON_KEY for this Preview deployment, then redeploy.'});
  try{
   const r=await fetch(base+'/rest/v1/rpc/sportiq_public_market_performance_v2',{method:'POST',headers:{apikey:key,Authorization:'Bearer '+key,'Content-Type':'application/json'},body:'{}',signal:AbortSignal.timeout(12000)});
   if(!r.ok)throw Error('rpc_http_'+r.status);
