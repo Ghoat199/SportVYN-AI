@@ -50,6 +50,7 @@ const publishedPredictionsHandler = async function publishedPredictionsHandler(r
         sport: m.sport, league: m.league, provider_match_id: m.provider_match_id,
         home_team: m.home_team, away_team: m.away_team, starts_at: m.starts_at,
         market: a.market, selection: a.selection, model_probability: p,
+        reference_odds: Number.isFinite(Number(a.bookmaker_odds)) && Number(a.bookmaker_odds)>1 ? Number(a.bookmaker_odds) : null,
         probabilities_1x2: m.sport === 'football' ? (forecastByMatch.get(String(m.id)) || null) : null,
         published_at: t.published_at
       }];
