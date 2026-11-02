@@ -26,8 +26,8 @@ async function backtestHandler(req,res){
     if(prior.length<20)continue;
     function rate(team,home){
      const played=prior.filter(m=>m.home_team===team||m.away_team===team).sort((a,b)=>b.starts_at-a.starts_at);
-     const overall=played.slice(0,10),venue=played.filter(m=>(home?m.home_team:m.away_team)===team).slice(0,8);
-     function avg(items){let scored=0,conceded=0,weights=0;items.forEach((m,i)=>{const w=Math.pow(.92,i),isHome=m.home_team===team;scored+=w*(isHome?m.home_score:m.away_score);conceded+=w*(isHome?m.away_score:m.home_score);weights+=w});return {n:items.length,scored:scored/weights,conceded:conceded/weights}}
+     const overall=played.slice(0,10),venue=played.filter(m=>sameTeam(home?m.home_team:m.away_team,team)).slice(0,8);
+     function avg(items){let scored=0,conceded=0,weights=0;items.forEach((m,i)=>{const w=Math.pow(.92,i),isHome=sameTeam(m.home_team,team);scored+=w*(isHome?m.home_score:m.away_score);conceded+=w*(isHome?m.away_score:m.home_score);weights+=w});return {n:items.length,scored:scored/weights,conceded:conceded/weights}}
      return {overall:avg(overall),venue:avg(venue)};
     }
     const h=rate(target.home_team,true),a=rate(target.away_team,false);
@@ -108,9 +108,19 @@ module.exports = async function handler(req,res){
   // Read-only diagnostics: distinguish missing finished rows from insufficient team history.
   const historyByLeague=history.reduce((acc,m)=>(acc[m.league]=(acc[m.league]||0)+1,acc),{});
 
+  // Provider naming differs across fixtures and historical results.
+  const canonicalTeam=name=>{
+   const value=String(name||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/\b(fc|cf|afc|rc|sc|ud)\b/g,' ').replace(/[^a-z0-9]/g,' ').replace(/\s+/g,' ').trim();
+   if(value.includes('newcastle'))return 'newcastle united';
+   if(value.includes('everton'))return 'everton';
+   if(value.includes('deportivo')&&value.includes('coruna'))return 'deportivo la coruna';
+   if(value.includes('osasuna'))return 'osasuna';
+   return value;
+  };
+  const sameTeam=(a,b)=>canonicalTeam(a)===canonicalTeam(b);
   // V1.2: use recent overall form alongside venue-specific form; shrink small samples.
   function rate(team,home,cutoff,league){
-   const matches=history.filter(m=>m.league===league&&Date.parse(m.starts_at)<cutoff&&(m.home_team===team||m.away_team===team)).sort((x,y)=>Date.parse(y.starts_at)-Date.parse(x.starts_at));
+   const matches=history.filter(m=>m.league===league&&Date.parse(m.starts_at)<cutoff&&(sameTeam(m.home_team,team)||sameTeam(m.away_team,team))).sort((x,y)=>Date.parse(y.starts_at)-Date.parse(x.starts_at));
    const overall=matches.slice(0,10);
    const venue=matches.filter(m=>(home?m.home_team:m.away_team)===team).slice(0,8);
    function avg(items){
