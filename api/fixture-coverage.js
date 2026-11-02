@@ -15,10 +15,10 @@ const publishedPredictionsHandler = async function publishedPredictionsHandler(r
   try {
     const tips = await read('sportvyn_tips?select=id,analysis_id,published_at&is_public=eq.true&order=published_at.desc&limit=100');
     const ids = [...new Set(tips.map(t => t.analysis_id).filter(v => /^[a-zA-Z0-9-]+$/.test(String(v))))];
-    if (!ids.length) return res.status(200).json({ schema_version: '1.0', generated_at: new Date().toISOString(), predictions: [] });
+    if (!ids.length) return res.status(200).json({ schema_version: '1.1', generated_at: new Date().toISOString(), predictions: [], diagnostics: { public_tips: tips.length, linked_analyses: 0, linked_matches: 0, valid_predictions: 0, reason: tips.length ? 'public_tips_missing_analysis_ids' : 'no_public_tips' } });
     const analyses = await read('sportvyn_analyses?select=id,match_id,market,selection,model_probability,bookmaker_odds&id=in.(' + ids.join(',') + ')');
     const matchIds = [...new Set(analyses.map(a => a.match_id).filter(v => /^[a-zA-Z0-9-]+$/.test(String(v))))];
-    if (!matchIds.length) return res.status(200).json({ schema_version: '1.0', generated_at: new Date().toISOString(), predictions: [] });
+    if (!matchIds.length) return res.status(200).json({ schema_version: '1.1', generated_at: new Date().toISOString(), predictions: [], diagnostics: { public_tips: tips.length, linked_analyses: analyses.length, linked_matches: 0, valid_predictions: 0, reason: 'analyses_missing_match_ids' } });
     const matches = await read('sportvyn_matches?select=id,provider_match_id,sport,league,home_team,away_team,starts_at&id=in.(' + matchIds.join(',') + ')');
     // Read only saved, historical model forecasts; never recompute or invent 1X2 values.
     let forecastByMatch = new Map();
@@ -55,7 +55,7 @@ const publishedPredictionsHandler = async function publishedPredictionsHandler(r
         published_at: t.published_at
       }];
     });
-    return res.status(200).json({ schema_version: '1.0', generated_at: new Date().toISOString(), predictions });
+    return res.status(200).json({ schema_version: '1.1', generated_at: new Date().toISOString(), predictions, diagnostics: { public_tips: tips.length, linked_analyses: analyses.length, linked_matches: matches.length, valid_predictions: predictions.length, reason: predictions.length ? 'ok' : 'no_valid_joined_predictions' } });
   } catch (e) {
     console.error('Published feed unavailable:', e.message);
     return res.status(502).json({ error: 'public_feed_unavailable' });
