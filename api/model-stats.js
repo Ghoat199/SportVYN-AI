@@ -1,5 +1,32 @@
 // Public, aggregate-only model performance; no secrets exposed.
+
+// SPORTIQ aggregate-only historical market diagnostics. Reuses this handler to
+// stay within the Vercel Hobby function limit. Never exposes database keys.
+async function sportiqDiagnostics(req,res){
+ if(req.method!=='GET')return res.status(405).json({error:'method_not_allowed'});
+ const base=(process.env.SPORTIQ_STATS_SUPABASE_URL||process.env.SUPABASE_URL||'').replace(/\/+$/,'').replace(/\/rest\/v1$/,'');
+ const key=process.env.SPORTIQ_STATS_ANON_KEY||process.env.SUPABASE_ANON_KEY;
+ if(!base||!key)return res.status(503).json({ok:false,error:'sportiq_stats_not_configured'});
+ try{
+  const r=await fetch(base+'/rest/v1/rpc/sportiq_public_market_performance_v2',{method:'POST',headers:{apikey:key,Authorization:'Bearer '+key,'Content-Type':'application/json'},body:'{}',signal:AbortSignal.timeout(12000)});
+  if(!r.ok)throw Error('rpc_http_'+r.status);
+  const rows=await r.json();
+  if(!Array.isArray(rows))throw Error('invalid_rpc_result');
+  const metrics=rows.filter(x=>typeof x.market==='string').map(x=>({
+   market:x.market,evaluated:Number(x.evaluated)||0,selection_count:Number(x.selection_count)||0,
+   selection_hit_rate:x.selection_hit_rate===null?null:Number(x.selection_hit_rate),
+   event_rate:x.event_rate===null?null:Number(x.event_rate),
+   mean_probability:x.mean_probability===null?null:Number(x.mean_probability),
+   calibration_gap:x.calibration_gap===null?null:Number(x.calibration_gap),
+   brier:x.brier===null?null:Number(x.brier)
+  }));
+  res.setHeader('Cache-Control','public, s-maxage=300, stale-while-revalidate=600');
+  return res.status(200).json({ok:true,marketDiagnostics:metrics,note:'Historical model diagnostics only; no demonstrated betting edge.'});
+ }catch(e){console.error('SPORTIQ diagnostics:',e.message);return res.status(503).json({ok:false,error:'sportiq_stats_unavailable'})}
+}
+
 module.exports=async function handler(req,res){
+ if(req.query && req.query.mode==='sportiq')return sportiqDiagnostics(req,res);
  if(req.method!=='GET')return res.status(405).json({error:'method_not_allowed'});
  const base=(process.env.SUPABASE_URL||'').replace(/\/+$/,'').replace(/\/rest\/v1$/,'');
  const key=process.env.SUPABASE_SERVICE_ROLE_KEY;
