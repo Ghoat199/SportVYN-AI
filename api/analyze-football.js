@@ -3,7 +3,7 @@ async function backtestHandler(req,res){
  try{
   // Use the same public historical feed as the live preview; never use future results.
   const season=new Date().getUTCMonth()>=6?new Date().getUTCFullYear():new Date().getUTCFullYear()-1;
-  const codes=[['bl1','Bundesliga'],['bl2','2. Bundesliga'],['bl3','3. Liga']];
+  const codes=[['bl1','Bundesliga'],['bl2','2. Bundesliga'],['bl3','3. Liga'],['pl','Premier League'],['la1','La Liga']];
   const feeds=await Promise.all(codes.flatMap(([code,league])=>[season-1,season].map(async year=>{
    try{
     const response=await fetch('https://api.openligadb.de/getmatchdata/'+code+'/'+year,{signal:AbortSignal.timeout(10000)});
@@ -84,9 +84,9 @@ module.exports = async function handler(req,res){
   const history=all.filter(m=>m.status==='finished'&&Number.isInteger(m.home_score)&&Number.isInteger(m.away_score));
   // Public historical result fallback, read-only. Only final 90-minute scores.
   const season=new Date().getUTCMonth()>=6?new Date().getUTCFullYear():new Date().getUTCFullYear()-1;
-  const leagueCodes=[['bl1','Bundesliga'],['bl2','2. Bundesliga'],['bl3','3. Liga']];
+  const leagueCodes=[['bl1','Bundesliga'],['bl2','2. Bundesliga'],['bl3','3. Liga'],['pl','Premier League'],['la1','La Liga']];
   let historySource='supabase',historyFetchStatus=[];
-  if(history.length===0){
+  if(true){
    const feeds=await Promise.all(leagueCodes.flatMap(([code,league])=>[season-1,season].map(async year=>{
     try{
      const response=await fetch('https://api.openligadb.de/getmatchdata/'+code+'/'+year,{signal:AbortSignal.timeout(8000)});
@@ -101,8 +101,9 @@ module.exports = async function handler(req,res){
     }catch(e){return {league,year,ok:false,rows:[]}}
    })));
    historyFetchStatus=feeds.map(x=>({league:x.league,season:x.year,ok:x.ok,count:x.rows.length}));
-   history.push(...feeds.flatMap(x=>x.rows));
-   historySource='openligadb_read_only';
+   const present=new Set(history.map(m=>m.league+'|'+m.home_team+'|'+m.away_team+'|'+String(m.starts_at).slice(0,10)));
+   for(const row of feeds.flatMap(x=>x.rows)){const k=row.league+'|'+row.home_team+'|'+row.away_team+'|'+String(row.starts_at).slice(0,10);if(!present.has(k)){history.push(row);present.add(k)}}
+   historySource='supabase_plus_openligadb_read_only';
   }
   // Read-only diagnostics: distinguish missing finished rows from insufficient team history.
   const historyByLeague=history.reduce((acc,m)=>(acc[m.league]=(acc[m.league]||0)+1,acc),{});
