@@ -71,7 +71,7 @@ async function loadTips(){
  }catch(err){statusEl.textContent='VERBINDUNGSFEHLER';copyEl.textContent='Tipps konnten nicht geladen werden. Bitte Datenbankzugriff und Konfiguration prüfen.';listEl.replaceChildren();console.error('SPORTIQ:',err)}
 }
 document.querySelectorAll('[data-sport]').forEach(button=>button.addEventListener('click',()=>{document.querySelectorAll('[data-sport]').forEach(b=>b.classList.remove('active'));button.classList.add('active');selectedSport=button.dataset.sport;renderTips()}));
-loadTips();
+const publishedTipsLoading=loadTips();
 const VIRTUAL_TIPS_KEY='sportvyn_virtual_tests_v1';
 function readVirtualTips(){try{const a=JSON.parse(localStorage.getItem(VIRTUAL_TIPS_KEY)||'[]');return Array.isArray(a)?a:[]}catch{return []}}
 function renderVirtualTips(){
@@ -361,7 +361,7 @@ loadUefa();
   const now=Date.now();
   const rows=predictions.filter(p=>(selected==='all'||p.sport===selected)&&(selectedMarket==='all'||p.market===selectedMarket)&&(!upcomingOnly||Date.parse(p.starts_at)>now)).sort((a,b)=>sortMode==='prob'?Number(b.model_probability)-Number(a.model_probability)||Date.parse(a.starts_at)-Date.parse(b.starts_at):sortMode==='latest'?Date.parse(b.published_at)-Date.parse(a.published_at):Date.parse(a.starts_at)-Date.parse(b.starts_at));
   const freshness=feedUpdatedAt?' · Feed erstellt: '+new Date(feedUpdatedAt).toLocaleString('de-DE',{timeZone:'Europe/Berlin'}):'';
-  status.textContent=rows.length?rows.length+' veröffentlichte Prognose(n)'+freshness:'Für diese Auswahl liegen derzeit keine veröffentlichten Prognosen vor.';
+  status.textContent=rows.length?rows.length+' veröffentlichte Prognose(n)'+freshness:(predictions.length&&upcomingOnly?'Keine bevorstehenden veröffentlichten Prognosen. Deaktiviere „Nur zukünftige Spiele“, um ältere Tipps zu sehen.':'Für diese Auswahl liegen derzeit keine veröffentlichten Prognosen vor.');
   for(const p of rows.slice(0,40)){
    const card=document.createElement('article');card.className='card sportiq-prediction-card';
    const top=document.createElement('div');top.className='sportiq-card-top';
@@ -393,10 +393,22 @@ loadUefa();
  document.getElementById('sportiq-upcoming').addEventListener('change',e=>{upcomingOnly=e.target.checked;render();});
  (async()=>{
   try{
-   const r=await fetch('/api/fixture-coverage?mode=published-predictions',{cache:'no-store'});
-   if(!r.ok)throw Error('HTTP '+r.status);
-   const d=await r.json();
-   if(!Array.isArray(d.predictions))throw Error('invalid_feed');
+   let d;
+   try {
+    const r=await fetch('/api/fixture-coverage?mode=published-predictions',{cache:'no-store'});
+    if(!r.ok)throw Error('HTTP '+r.status);
+    d=await r.json();
+    if(!Array.isArray(d.predictions))throw Error('invalid_feed');
+   } catch(feedError) {
+    // Reuse the existing public Supabase data reader when the optional API feed is unavailable.
+    await publishedTipsLoading;
+    d={predictions:publishedTips.map(t=>({
+      sport:t.sport,league:t.league,home_team:t.home_team,away_team:t.away_team,
+      starts_at:t.starts_at,market:t.market,selection:t.selection,
+      model_probability:t.model_probability,reference_odds:t.bookmaker_odds,
+      published_at:t.published_at
+    }))};
+   }
    feedUpdatedAt=Number.isFinite(Date.parse(d.generated_at))?d.generated_at:null;
    predictions=d.predictions.filter(p=>p&&['football','basketball','tennis','hockey'].includes(p.sport)&&typeof p.home_team==='string'&&typeof p.away_team==='string'&&typeof p.market==='string'&&typeof p.selection==='string'&&Number.isFinite(Number(p.model_probability))&&Number(p.model_probability)>0&&Number(p.model_probability)<1&&Number.isFinite(Date.parse(p.starts_at))&&Number.isFinite(Date.parse(p.published_at)));
    const marketSelect=document.getElementById('sportiq-market');
