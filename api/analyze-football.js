@@ -1,63 +1,64 @@
 async function backtestHandler(req,res){
  if(req.method!=='GET')return res.status(405).json({error:'method_not_allowed'});
- const base=(process.env.SUPABASE_URL||process.env.SPORTIQ_STATS_SUPABASE_URL||'').replace(/\/+$/,'').replace(/\/rest\/v1$/,'');
- const key=process.env.SUPABASE_SERVICE_ROLE_KEY||process.env.SUPABASE_ANON_KEY||process.env.SUPABASE_PUBLISHABLE_KEY||process.env.SPORTIQ_STATS_ANON_KEY;
- if(!base||!key)return res.status(503).json({error:'missing_configuration'});
  try{
-  const q=new URLSearchParams({select:'id,league,home_team,away_team,starts_at,status,home_score,away_score',sport:'eq.football',status:'eq.finished',order:'starts_at.asc',limit:'3000'});
-  const r=await fetch(base+'/rest/v1/sportvyn_matches?'+q,{headers:{apikey:key,Authorization:'Bearer '+key},signal:AbortSignal.timeout(12000)});
-  if(!r.ok)throw Error('database_http_'+r.status);
-  const fetched=await r.json();
-  const rows=fetched.filter(m=>m.league&&m.home_team&&m.away_team&&Number.isFinite(Date.parse(m.starts_at))&&Number.isInteger(m.home_score)&&Number.isInteger(m.away_score));
-  const byLeague=new Map();for(const m of rows){if(!byLeague.has(m.league))byLeague.set(m.league,[]);byLeague.get(m.league).push(m)}
+  // Use the same public historical feed as the live preview; never use future results.
+  const season=new Date().getUTCMonth()>=6?new Date().getUTCFullYear():new Date().getUTCFullYear()-1;
+  const codes=[['bl1','Bundesliga'],['bl2','2. Bundesliga'],['bl3','3. Liga']];
+  const feeds=await Promise.all(codes.flatMap(([code,league])=>[season-1,season].map(async year=>{
+   try{
+    const response=await fetch('https://api.openligadb.de/getmatchdata/'+code+'/'+year,{signal:AbortSignal.timeout(10000)});
+    if(!response.ok)throw Error('HTTP '+response.status);
+    const raw=await response.json();if(!Array.isArray(raw))throw Error('invalid_response');
+    return {league,year,ok:true,rows:raw.filter(m=>m.matchIsFinished&&m.team1?.teamName&&m.team2?.teamName&&m.matchDateTimeUTC).map(m=>{
+     const score=(m.matchResults||[]).find(x=>x.resultTypeID===2||x.resultTypeKind==='After90Minutes');
+     if(!score||!Number.isInteger(score.pointsTeam1)||!Number.isInteger(score.pointsTeam2))return null;
+     return {id:m.matchID,league,home_team:m.team1.teamName,away_team:m.team2.teamName,starts_at:Date.parse(m.matchDateTimeUTC),home_score:score.pointsTeam1,away_score:score.pointsTeam2};
+    }).filter(Boolean)};
+   }catch(e){return {league,year,ok:false,rows:[],error:String(e.message||e)}}
+  })));
   const pois=(k,l)=>{let p=Math.exp(-l);for(let i=1;i<=k;i++)p*=l/i;return p};
-  const summaries=[];
-  for(const [league,matches] of byLeague){
-   let n=0,correct=0,brier=0,baselineCorrect=0,baselineBrier=0,homePred=0,homeActual=0,homeProb=0;
-   let holdoutN=0,holdoutCorrect=0,holdoutBrier=0,holdoutBaselineBrier=0;
-   const eligiblePredictions=[];
-   const buckets=Array.from({length:5},(_,i)=>({range:(i*20)+'-'+((i+1)*20)+'%',count:0,predicted:0,actual:0}));
-   for(let idx=0;idx<matches.length;idx++){
-    const target=matches[idx],prior=matches.slice(0,idx).filter(x=>Date.parse(x.starts_at)<Date.parse(target.starts_at));
+  const results=[];
+  for(const league of codes.map(x=>x[1])){
+   const matches=feeds.filter(x=>x.league===league).flatMap(x=>x.rows).sort((a,b)=>a.starts_at-b.starts_at);
+   const eligible=[];
+   for(const target of matches){
+    const prior=matches.filter(x=>x.starts_at<target.starts_at);
     if(prior.length<20)continue;
-    function rate(team,isHome){
-     const recent=prior.filter(x=>x.home_team===team||x.away_team===team).slice(-10).reverse();
-     const venue=recent.filter(x=>(isHome?x.home_team:x.away_team)===team);
-     // Venue sample independently drawn from latest 8 venue matches, not only last 10 overall.
-     const venue8=prior.filter(x=>(isHome?x.home_team:x.away_team)===team).slice(-8).reverse();
-     const avg=arr=>{let sc=0,co=0,w=0;arr.forEach((x,i)=>{const weight=Math.pow(.92,i),home=x.home_team===team;sc+=weight*(home?x.home_score:x.away_score);co+=weight*(home?x.away_score:x.home_score);w+=weight});return {sc:sc/w,co:co/w}};
-     return {n:recent.length,v:venue8.length,overall:recent.length?avg(recent):null,venue:venue8.length?avg(venue8):null};
+    function rate(team,home){
+     const played=prior.filter(m=>m.home_team===team||m.away_team===team).sort((a,b)=>b.starts_at-a.starts_at);
+     const overall=played.slice(0,10),venue=played.filter(m=>(home?m.home_team:m.away_team)===team).slice(0,8);
+     function avg(items){let scored=0,conceded=0,weights=0;items.forEach((m,i)=>{const w=Math.pow(.92,i),isHome=m.home_team===team;scored+=w*(isHome?m.home_score:m.away_score);conceded+=w*(isHome?m.away_score:m.home_score);weights+=w});return {n:items.length,scored:scored/weights,conceded:conceded/weights}}
+     return {overall:avg(overall),venue:avg(venue)};
     }
     const h=rate(target.home_team,true),a=rate(target.away_team,false);
-    if(h.n<5||a.n<5||h.v<3||a.v<3)continue;
-    const lh=prior.slice(-200).reduce((s,x)=>s+x.home_score,0)/Math.min(prior.length,200);
-    const la=prior.slice(-200).reduce((s,x)=>s+x.away_score,0)/Math.min(prior.length,200);
-    const blend=(v,o)=>.55*v+.45*o;
-    const hl=Math.max(.2,Math.min(4.5,(blend(h.venue.sc,h.overall.sc)+blend(a.venue.co,a.overall.co)+lh)/3));
-    const al=Math.max(.2,Math.min(4.5,(blend(a.venue.sc,a.overall.sc)+blend(h.venue.co,h.overall.co)+la)/3));
+    if(h.overall.n<5||a.overall.n<5||h.venue.n<3||a.venue.n<3)continue;
+    const last=prior.slice(-200);
+    const leagueHome=last.reduce((s,x)=>s+x.home_score,0)/last.length,leagueAway=last.reduce((s,x)=>s+x.away_score,0)/last.length;
+    const blend=(x,y)=>.55*x+.45*y;
+    const shrink=(v,base,n)=>base+(v-base)*n/(n+8);
+    const ha=shrink(blend(h.venue.scored,h.overall.scored),leagueHome,h.venue.n);
+    const hd=shrink(blend(h.venue.conceded,h.overall.conceded),leagueAway,h.venue.n);
+    const aa=shrink(blend(a.venue.scored,a.overall.scored),leagueAway,a.venue.n);
+    const ad=shrink(blend(a.venue.conceded,a.overall.conceded),leagueHome,a.venue.n);
+    const hl=Math.max(.2,Math.min(4.5,ha*ad/Math.max(.3,leagueHome)));
+    const al=Math.max(.2,Math.min(4.5,aa*hd/Math.max(.3,leagueAway)));
     let probs=[0,0,0],total=0;
-    for(let i=0;i<=12;i++)for(let j=0;j<=12;j++){const p=pois(i,hl)*pois(j,al);total+=p;probs[i>j?0:i===j?1:2]+=p}
-    probs=probs.map(p=>p/total);
+    for(let i=0;i<=12;i++)for(let j=0;j<=12;j++){const v=pois(i,hl)*pois(j,al);total+=v;probs[i>j?0:i===j?1:2]+=v}
+    probs=probs.map(x=>x/total);
     const actual=target.home_score>target.away_score?0:target.home_score===target.away_score?1:2;
-    const winner=probs.indexOf(Math.max(...probs));
-    const baselineCounts=[0,0,0];for(const x of prior){baselineCounts[x.home_score>x.away_score?0:x.home_score===x.away_score?1:2]++}const baseline=baselineCounts.map(x=>x/prior.length);const baselineWinner=baseline.indexOf(Math.max(...baseline));baselineCorrect+=Number(baselineWinner===actual);baselineBrier+=baseline.reduce((sum,p,i)=>sum+(p-Number(i===actual))**2,0);
-    n++;correct+=Number(winner===actual);homePred+=Number(winner===0);homeActual+=Number(actual===0);homeProb+=probs[0];
-    brier+=probs.reduce((sum,p,i)=>sum+(p-Number(i===actual))**2,0);
-    // Strictly chronological final 30% holdout; no model selection is performed here.
-    eligiblePredictions.push({winner,actual,probs,baseline});
-    const bucket=buckets[Math.min(4,Math.floor(probs[0]*5))];bucket.count++;bucket.predicted+=probs[0];bucket.actual+=Number(actual===0);
+    const favorite=probs.indexOf(Math.max(...probs));
+    const counts=[0,0,0];for(const x of prior)counts[x.home_score>x.away_score?0:x.home_score===x.away_score?1:2]++;
+    const baseline=counts.map(n=>n/prior.length);
+    const brier=(p)=>p.reduce((s,v,i)=>s+(v-Number(i===actual))**2,0);
+    eligible.push({actual,favorite,probs,baseline,brier:brier(probs),baselineBrier:brier(baseline)});
    }
-   // Hold out the last 30% of eligible chronological predictions, not raw fixtures.
-   const holdoutStart=Math.floor(eligiblePredictions.length*.7);
-   for(const p of eligiblePredictions.slice(holdoutStart)){
-    holdoutN++;holdoutCorrect+=Number(p.winner===p.actual);
-    holdoutBrier+=p.probs.reduce((sum,v,i)=>sum+(v-Number(i===p.actual))**2,0);
-    holdoutBaselineBrier+=p.baseline.reduce((sum,v,i)=>sum+(v-Number(i===p.actual))**2,0);
-   }
-   if(n)summaries.push({league,sample:n,holdout:{sample:holdoutN,accuracy:holdoutN?+(holdoutCorrect/holdoutN).toFixed(4):null,brier_score:holdoutN?+(holdoutBrier/holdoutN).toFixed(4):null,baseline_brier_score:holdoutN?+(holdoutBaselineBrier/holdoutN).toFixed(4):null},accuracy:+(correct/n).toFixed(4),brier_score:+(brier/n).toFixed(4),baseline_accuracy:+(baselineCorrect/n).toFixed(4),baseline_brier_score:+(baselineBrier/n).toFixed(4),brier_improvement_vs_baseline:+((baselineBrier-brier)/n).toFixed(4),predicted_home_favorite_share:+(homePred/n).toFixed(4),actual_home_win_share:+(homeActual/n).toFixed(4),mean_predicted_home_win_probability:+(homeProb/n).toFixed(4),home_calibration:buckets.filter(b=>b.count).map(b=>({range:b.range,count:b.count,mean_predicted:+(b.predicted/b.count).toFixed(4),actual_home_win_rate:+(b.actual/b.count).toFixed(4)}))});
+   const holdout=eligible.slice(Math.floor(eligible.length*.7));
+   const avg=(arr,fn)=>arr.length?+(arr.reduce((s,x)=>s+fn(x),0)/arr.length).toFixed(4):null;
+   const summarize=arr=>({sample:arr.length,accuracy:avg(arr,x=>Number(x.favorite===x.actual)),brier_score:avg(arr,x=>x.brier),baseline_brier_score:avg(arr,x=>x.baselineBrier),predicted_home_favorite_share:avg(arr,x=>Number(x.favorite===0)),actual_home_win_share:avg(arr,x=>Number(x.actual===0)),mean_predicted_home_win_probability:avg(arr,x=>x.probs[0]),favorite_distribution:{home:arr.filter(x=>x.favorite===0).length,draw:arr.filter(x=>x.favorite===1).length,away:arr.filter(x=>x.favorite===2).length}});
+   results.push({league,...summarize(eligible),holdout:summarize(holdout)});
   }
   res.setHeader('Cache-Control','public, s-maxage=3600');
-  return res.status(200).json({ok:true,model:'poisson_form_blend_v1_6_coverage_diagnostics',method:'walk_forward_no_future_results',note:'Diagnostic only; baseline uses historical league outcome frequencies available before each match. Lower Brier score is better. No demonstrated betting edge.',total_finished_rows:rows.length,data_coverage:{fetched_rows:fetched.length,valid_finished_rows:rows.length,query_limit:3000,may_be_truncated:fetched.length===3000,leagues_with_eligible_predictions:summaries.length,eligible_predictions:summaries.reduce((sum,x)=>sum+x.sample,0),holdout_predictions:summaries.reduce((sum,x)=>sum+x.holdout.sample,0),note:'Coverage is limited to existing stored results; this endpoint does not import additional historical matches.'},leagues:summaries});
+  return res.status(200).json({ok:true,model:'poisson_league_relative_shrunk_v1_3',method:'chronological_walk_forward_no_future_results',history_source:'openligadb_read_only',history_fetch_status:feeds.map(x=>({league:x.league,season:x.year,ok:x.ok,count:x.rows.length,error:x.error})),completed_matches:feeds.reduce((s,x)=>s+x.rows.length,0),note:'Historical diagnostic, not proof of betting edge. Holdout is final 30% of eligible matches. Lower Brier score is better; baseline uses prior league outcome frequencies.',leagues:results});
  }catch(e){return res.status(502).json({error:'backtest_failed',detail:String(e.message||e)})}
 };
 // SportVYN AI: transparent, deterministic league-separated multi-league baseline model.
