@@ -57,7 +57,7 @@ async function backtestHandler(req,res){
    const summarize=arr=>({sample:arr.length,accuracy:avg(arr,x=>Number(x.favorite===x.actual)),brier_score:avg(arr,x=>x.brier),baseline_brier_score:avg(arr,x=>x.baselineBrier),predicted_home_favorite_share:avg(arr,x=>Number(x.favorite===0)),actual_home_win_share:avg(arr,x=>Number(x.actual===0)),mean_predicted_home_win_probability:avg(arr,x=>x.probs[0]),favorite_distribution:{home:arr.filter(x=>x.favorite===0).length,draw:arr.filter(x=>x.favorite===1).length,away:arr.filter(x=>x.favorite===2).length}});
    results.push({league,...summarize(eligible),holdout:summarize(holdout)});
   }
-  res.setHeader('Cache-Control','public, s-maxage=3600');
+  res.setHeader('Cache-Control','no-store, max-age=0');res.setHeader('X-Sportiq-Model','poisson_league_relative_shrunk_v1_3');
   return res.status(200).json({ok:true,model:'poisson_league_relative_shrunk_v1_3',method:'chronological_walk_forward_no_future_results',history_source:'openligadb_read_only',history_fetch_status:feeds.map(x=>({league:x.league,season:x.year,ok:x.ok,count:x.rows.length,error:x.error})),completed_matches:feeds.reduce((s,x)=>s+x.rows.length,0),note:'Historical diagnostic, not proof of betting edge. Holdout is final 30% of eligible matches. Lower Brier score is better; baseline uses prior league outcome frequencies.',leagues:results});
  }catch(e){return res.status(502).json({error:'backtest_failed',detail:String(e.message||e)})}
 };
