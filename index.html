@@ -106,9 +106,23 @@ async function showFootballPredictions(){
  const filters=node('div',undefined,'filters');
  const state=node('p','Prognosen werden geladen …','muted');
  const coverage=node('p','Modell-Datenlage wird geladen …','muted');coverage.setAttribute('role','status');
+ const backtestStatus=node('p','Historischer Backtest noch nicht geladen.','muted');
+ const backtestButton=node('button','Historischen Modelltest v1.3 starten');backtestButton.type='button';
+ backtestButton.addEventListener('click',async()=>{
+  backtestButton.disabled=true;backtestStatus.textContent='Historische Ergebnisse werden unabhängig geprüft …';
+  try{
+   const response=await fetch('/api/analyze-football?mode=backtest&v=1_3&t='+Date.now(),{cache:'no-store',headers:{'Cache-Control':'no-cache'}});
+   const result=await response.json();
+   if(!response.ok||!result.ok)throw Error(result.detail||result.error||'HTTP '+response.status);
+   if(result.model!=='poisson_league_relative_shrunk_v1_3')throw Error('Veraltetes Deployment liefert '+result.model+'. Bitte in Vercel das neueste Branch-Deployment prüfen.');
+   const summary=(result.leagues||[]).map(l=>l.league+': '+l.sample+' Spiele, Heim-Favoriten '+Math.round((l.predicted_home_favorite_share||0)*100)+' %, tatsächliche Heimsiege '+Math.round((l.actual_home_win_share||0)*100)+' %, Holdout Brier '+(l.holdout?.brier_score??'–')+' (Baseline '+(l.holdout?.baseline_brier_score??'–')+')').join(' | ');
+   backtestStatus.textContent='SPORTIQ '+result.model+' · '+(result.completed_matches||0)+' historische Ergebnisse. '+(summary||'Keine auswertbaren Spiele. Datenquelle prüfen.');
+  }catch(error){backtestStatus.textContent='Backtest nicht verfügbar: '+String(error.message||error)}
+  finally{backtestButton.disabled=false}
+ });
  const cards=node('div');cards.style.cssText='display:grid;gap:12px';
  const historyHeading=node('h3','Meine virtuellen Tipp-Tests');const historyNote=node('p','Nur Testeinsätze, kein Echtgeld. Die Einträge werden ausschließlich im Browser dieses Geräts gespeichert und nicht automatisch mit den offiziellen Modellstatistiken abgeglichen.','muted');const history=node('div');history.id='virtual-tip-history';history.style.cssText='display:grid;gap:10px';
- const dailyHeading=node('h3','Tipps des Tages · Modellvorschläge');const dailyNote=node('p','Getrennte Prognosen für 1X2, Doppelte Chance und Tore bei abgeglichenen Spielansetzungen. Keine geprüften Value-Wetten.','muted');const dailyCards=node('div');dailyCards.style.cssText='display:grid;gap:10px';section.append(dailyHeading,dailyNote,dailyCards,heading,note,coverage,filters,state,cards,historyHeading,historyNote,history);panel.append(section);renderVirtualTips();
+ const dailyHeading=node('h3','Tipps des Tages · Modellvorschläge');const dailyNote=node('p','Getrennte Prognosen für 1X2, Doppelte Chance und Tore bei abgeglichenen Spielansetzungen. Keine geprüften Value-Wetten.','muted');const dailyCards=node('div');dailyCards.style.cssText='display:grid;gap:10px';section.append(dailyHeading,dailyNote,dailyCards,heading,note,coverage,backtestButton,backtestStatus,filters,state,cards,historyHeading,historyNote);panel.append(section);renderVirtualTips();
  let selected='Bundesliga',predictions=[];
  let verifiedFixtureIds=new Set();
  const pct=n=>(100*n).toLocaleString('de-DE',{maximumFractionDigits:1,minimumFractionDigits:1})+' %';
