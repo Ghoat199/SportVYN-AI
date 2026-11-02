@@ -173,14 +173,18 @@ async function showFootballPredictions(){
     marketBox.append(node('strong','KI-Marktvergleich · automatisch'));
     if(markets.length){
      const best=markets[0];
-     const headline=node('p','Höchste Modellwahrscheinlichkeit: '+best[0]+' · '+pct(best[1]));
+     const best1x2=markets.filter(x=>['Heimsieg','Unentschieden','Auswärtssieg'].includes(x[0]))[0];
+     const bestGoals=markets.filter(x=>!['Heimsieg','Unentschieden','Auswärtssieg'].includes(x[0])&&!x[0].startsWith('Doppelte Chance'))[0];
+     const headline=node('p','Doppelte Chance (separater Markt): '+best[0]+' · '+pct(best[1]));
+     if(best1x2)marketBox.append(node('p','1X2-Favorit: '+best1x2[0]+' · '+pct(best1x2[1])));
+     if(bestGoals)marketBox.append(node('p','Tor-Markt mit höchster Wahrscheinlichkeit: '+bestGoals[0]+' · '+pct(bestGoals[1])));
      headline.style.cssText='font-weight:800;color:#5ee0a3;font-size:17px;margin:10px 0';
      marketBox.append(headline);
-     const alternatives=node('p','Weitere Möglichkeiten: '+markets.slice(1,4).map(x=>x[0]+' '+pct(x[1])).join(' · '),'muted');
+     const alternatives=node('p','Weitere Doppelte Chancen: '+markets.filter(x=>x[0].startsWith('Doppelte Chance')&&x[0]!==best[0]).map(x=>x[0]+' '+pct(x[1])).join(' · '),'muted');
      marketBox.append(alternatives);
      marketBox.append(node('p',best[1]>=0.7?'Modellwert mindestens 70 % – noch keine geprüfte Empfehlung.':'Kein untersuchter Markt erreicht 70 % Modellwahrscheinlichkeit.','muted'));
     }else marketBox.append(node('p','Für dieses Spiel liegen keine vollständigen Marktprognosen vor.','muted'));
-    marketBox.append(node('p','Automatische Rangfolge aus dem Poisson-Basismodell. Doppelte Chancen sind naturgemäß oft wahrscheinlicher als Einzelergebnisse. Verletzungen, aktuelle Nachrichten und Buchmacherquoten fehlen; keine Gewinngarantie oder Value-Prüfung.','muted'));
+    marketBox.append(node('p','Doppelte Chancen werden getrennt von 1X2 und Tormärkten verglichen, da sie naturgemäß häufiger eintreten. Keine künstliche Bevorzugung von Heim- oder Auswärtssiegen. Verletzungen, aktuelle Nachrichten und Buchmacherquoten fehlen; keine Gewinngarantie oder Value-Prüfung.','muted'));
     card.append(marketBox);
     const testRow=node('div');testRow.style.cssText='display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px';
     const stakeInput=document.createElement('input');stakeInput.type='number';stakeInput.min='0.01';stakeInput.max='10000';stakeInput.step='0.01';stakeInput.value='5';stakeInput.setAttribute('aria-label','Virtueller Einsatz in Euro');stakeInput.style.cssText='width:90px;padding:10px;border-radius:8px;background:#07131f;color:#eaf5fa;border:1px solid #315066';
