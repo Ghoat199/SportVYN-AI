@@ -1,34 +1,39 @@
 <!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SPORTIQ AI – Heutige Analysen</title><style>:root{font-family:system-ui,Arial,sans-serif;background:#081622;color:#edf5f8}*{box-sizing:border-box}body{margin:0}header,main,footer{max-width:850px;margin:auto;padding:22px}header{border-bottom:1px solid #2a4050;display:flex;justify-content:space-between;align-items:center}h1{font-size:28px;margin:0}h1 span{color:#69e4af}h2{font-size:24px}p{line-height:1.5}.muted{color:#abc0ca}.card{background:#112837;border:1px solid #2a4757;border-radius:16px;padding:22px;margin:15px 0}.tip{font-size:23px;font-weight:800;color:#76edb8;margin:12px 0}.percent{font-size:16px;color:#fff}.meta{color:#b9ced8;font-size:14px}.badge{font-size:12px;border:1px solid #456777;border-radius:30px;padding:5px 10px}.filters{display:flex;gap:8px;flex-wrap:wrap;margin:18px 0}button{background:#18394a;color:#eaf5f8;border:1px solid #406174;padding:10px 14px;border-radius:9px;cursor:pointer}button.active{background:#6be7b2;color:#06241c;font-weight:700}.note{border-left:3px solid #6be7b2;padding-left:13px;color:#bed1da}.empty{padding:30px;background:#112837;border-radius:14px}footer{font-size:13px;color:#a6bbc6}@media(max-width:600px){header,main,footer{padding:16px}h1{font-size:23px}}</style></head><body><header><h1>SPORTIQ <span>AI</span></h1><span class="badge">Sportanalysen</span></header><main><h2>Spiele heute</h2><p class="muted">Automatische Analyse statt unübersichtlicher Tabellen. Ein Vorschlag nur, wenn genügend Spieldaten vorliegen.</p><div class="filters" id="filters"><button class="active" data-filter="today">Heute</button><button data-filter="tomorrow">Morgen</button><button data-filter="week">Nächste 7 Tage</button></div><p id="status" class="muted">Spiele und Modell werden geladen …</p><div id="games"></div><p class="note">Experimentelle Wahrscheinlichkeiten, keine garantierten Ergebnisse. Ohne belastbare Analyse gibt SPORTIQ keinen Tipp aus. Buchmacherquoten und ein nachgewiesener Wettvorteil liegen derzeit nicht vor.</p></main><footer>SPORTIQ AI · Datenbasierte Modellvorschläge, keine automatischen Wetten.</footer><script>
-let selected='today',games=[],predictions=[],modelAvailable=false;
+let selected='today',predictions=[];
 const out=document.getElementById('games'),status=document.getElementById('status');
-const dateBerlin=d=>new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Berlin',year:'numeric',month:'2-digit',day:'2-digit'}).format(d);
-const berlinDayOffset=(n)=>{const d=new Date();d.setDate(d.getDate()+n);return dateBerlin(d)};
+const day=d=>new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Berlin',year:'numeric',month:'2-digit',day:'2-digit'}).format(d);
+const offset=n=>{const d=new Date();d.setDate(d.getDate()+n);return day(d)};
 const esc=s=>String(s??'').replace(/[&<>"']/g,x=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[x]));
-const percent=n=>(n*100).toLocaleString('de-DE',{maximumFractionDigits:1})+' %';
-const norm=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');
-const key=s=>String(s||'').split(/\s+[–—-]\s+/).map(norm).join('|');
+const pct=n=>(n*100).toLocaleString('de-DE',{maximumFractionDigits:1})+' %';
 function render(){
- out.replaceChildren();const now=Date.now(),today=berlinDayOffset(0),tomorrow=berlinDayOffset(1);
- const filtered=games.filter(g=>{const t=Date.parse(g.starts_at);if(!Number.isFinite(t)||t<now-90*60000)return false;const day=dateBerlin(new Date(t));return selected==='today'?day===today:selected==='tomorrow'?day===tomorrow:t<now+7*86400000}).sort((a,b)=>Date.parse(a.starts_at)-Date.parse(b.starts_at));
- status.textContent=filtered.length+' Spiele · '+(modelAvailable?'Analyse geladen':'Analyse derzeit nicht verfügbar');
- if(!filtered.length){out.innerHTML='<div class="empty">Für diesen Zeitraum sind keine bestätigten Spiele verfügbar.</div>';return}
- for(const g of filtered.slice(0,50)){
-  const verified=['independent_sample_match','matches_import_source'].includes(g.verification_status)&&g.validation_status!=='review_required';
-  const m=predictions.find(p=>p.status==='model_ready'&&p.league===g.league&&key(p.match)===key(g.match)&&Math.abs(Date.parse(p.starts_at)-Date.parse(g.starts_at))<=15*60000);
+ out.replaceChildren();const now=Date.now(),today=offset(0),tomorrow=offset(1);
+ const items=predictions.filter(p=>{const t=Date.parse(p.starts_at);if(!Number.isFinite(t)||t<now-90*60000)return false;const d=day(new Date(t));return selected==='today'?d===today:selected==='tomorrow'?d===tomorrow:t<now+7*86400000}).sort((a,b)=>Date.parse(a.starts_at)-Date.parse(b.starts_at));
+ status.textContent=items.length+' Spiele · SPORTIQ-Modellanalyse';
+ if(!items.length){out.innerHTML='<div class="empty">Für diesen Zeitraum liegen derzeit keine Spiele in der SPORTIQ-Analyse vor.</div>';return}
+ for(const p of items.slice(0,50)){
   const card=document.createElement('article');card.className='card';
-  const time=new Date(g.starts_at).toLocaleString('de-DE',{timeZone:'Europe/Berlin',weekday:'short',hour:'2-digit',minute:'2-digit'});
-  let content='<div class="meta">'+esc(g.league)+' · '+esc(time)+'</div><h3>'+esc(g.match)+'</h3>';
-  if(!verified){content+='<p class="muted">Spielansetzung nicht unabhängig bestätigt – kein Tipp.</p>'}
-  else if(!m){content+='<p class="muted">Kein Tipp – nicht genügend zuverlässige Modelldaten.</p>'}
+  const t=new Date(p.starts_at).toLocaleString('de-DE',{timeZone:'Europe/Berlin',weekday:'short',hour:'2-digit',minute:'2-digit'});
+  let content='<div class="meta">'+esc(p.league)+' · '+esc(t)+'</div><h3>'+esc(p.match)+'</h3>';
+  if(p.status!=='model_ready'){content+='<p class="muted">Kein Tipp – für dieses Spiel fehlen ausreichend historische Daten.</p>'}
   else{
-   const options=[{label:'Über 1,5 Tore',p:1-Math.exp(-(m.expected_goals.home+m.expected_goals.away))*(1+m.expected_goals.home+m.expected_goals.away),reason:'Aus den erwarteten Toren beider Mannschaften berechnet.'},{label:'Über 2,5 Tore',p:m.goal_markets?.over_2_5,reason:'Auf Basis der erwarteten Tore und Torverteilung berechnet.'},{label:'Beide Teams treffen',p:m.goal_markets?.both_teams_score_yes,reason:'Beide Mannschaften haben laut Modell eine relevante Torwahrscheinlichkeit.'},{label:'Heimsieg',p:m.probabilities?.home,reason:'Vergleich der jüngsten Heim- und Auswärtsleistungen.'},{label:'Auswärtssieg',p:m.probabilities?.away,reason:'Vergleich der jüngsten Heim- und Auswärtsleistungen.'}].filter(x=>Number.isFinite(x.p)).sort((a,b)=>b.p-a.p);
-   const best=options[0];if(best&&best.p>=.7&&m.confidence!=='low'){
-    content+='<div class="meta">Modellvorschlag</div><div class="tip">'+esc(best.label)+' <span class="percent">'+percent(best.p)+'</span></div><p><strong>Analyse:</strong> '+esc(best.reason)+' Erwartete Tore: '+Number(m.expected_goals.home).toFixed(2)+' : '+Number(m.expected_goals.away).toFixed(2)+'. Datenlage: '+esc(m.confidence)+'.</p><p class="muted">Wahrscheinlichkeit ist nicht gleich Wettwert; ohne aktuelle Quote kein nachgewiesener Vorteil.</p>';
-   }else content+='<p class="muted">Kein Tipp – keine ausreichend klare Modellprognose.</p>';
+   const g=p.expected_goals||{},total=Number(g.home)+Number(g.away);
+   const choices=[
+    {name:'Über 1,5 Tore',prob:Number.isFinite(total)?1-Math.exp(-total)*(1+total):NaN,reason:'Erwartete Tore beider Teams'},
+    {name:'Über 2,5 Tore',prob:p.goal_markets?.over_2_5,reason:'Torverteilung aus dem Poisson-Modell'},
+    {name:'Beide Teams treffen',prob:p.goal_markets?.both_teams_score_yes,reason:'Geschätzte Torwahrscheinlichkeiten beider Teams'},
+    {name:'Heimsieg',prob:p.probabilities?.home,reason:'Heim- und Auswärtsform im Modell'},
+    {name:'Auswärtssieg',prob:p.probabilities?.away,reason:'Heim- und Auswärtsform im Modell'}
+   ].filter(x=>typeof x.prob==='number'&&Number.isFinite(x.prob)&&x.prob>=0&&x.prob<=1).sort((a,b)=>b.prob-a.prob);
+   const best=choices[0];
+   // Model feed validates provider conflicts, but not independent fixture existence.
+   // Without independent fixture confirmation or calibrated probabilities, do not label a betting recommendation.
+   if(best&&best.prob>=.7){
+    content+='<div class="meta">KI-Modellvorschlag · keine geprüfte Wette</div><div class="tip">'+esc(best.name)+' <span class="percent">'+pct(best.prob)+'</span></div><p><strong>Analyse:</strong> '+esc(best.reason)+'. Erwartete Tore: '+(Number.isFinite(Number(g.home))?Number(g.home).toFixed(2):'–')+' : '+(Number.isFinite(Number(g.away))?Number(g.away).toFixed(2):'–')+'.</p><p class="muted">Spieltermin noch unabhängig zu bestätigen. Modellwerte sind nicht kalibriert; keine Quotenprüfung.</p>';
+   }else content+='<p class="muted">Kein Tipp – keine ausreichend klare Modellwahrscheinlichkeit.</p>';
   }
   card.innerHTML=content;out.append(card);
  }
 }
 document.getElementById('filters').addEventListener('click',e=>{const b=e.target.closest('button[data-filter]');if(!b)return;selected=b.dataset.filter;document.querySelectorAll('#filters button').forEach(x=>x.classList.toggle('active',x===b));render()});
-(async()=>{try{let response=await fetch('/api/fixtures-week',{cache:'no-store'});let data=await response.json();if(!response.ok||!data.ok||!Array.isArray(data.games))throw Error('fixtures');games=data.games;try{response=await fetch('/api/analyze-football',{cache:'no-store'});data=await response.json();if(response.ok&&data.ok&&Array.isArray(data.predictions)){predictions=data.predictions;modelAvailable=true}}catch(_){}render()}catch(_){status.textContent='Spielplan derzeit nicht erreichbar. Bitte später erneut versuchen.'}})();
+(async()=>{try{const response=await fetch('/api/analyze-football?view=homepage&ts='+Date.now(),{cache:'no-store'});if(!response.ok)throw Error('HTTP '+response.status);const data=await response.json();if(!data.ok||!Array.isArray(data.predictions))throw Error('Ungültige Modelldaten');predictions=data.predictions;render()}catch(e){status.textContent='Die SPORTIQ-Analyse ist derzeit nicht erreichbar ('+String(e.message||e)+').';out.innerHTML='<div class="empty">Bitte später erneut versuchen.</div>'}})();
 </script></body></html>
