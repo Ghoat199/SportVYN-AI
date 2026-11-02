@@ -81,6 +81,28 @@ module.exports = async function handler(req,res){
   }
   const validUpcoming=upcoming.filter(m=>m.provider==='openligadb'&&m.league&&m.home_team&&m.away_team&&m.home_team.trim().toLowerCase()!==m.away_team.trim().toLowerCase()&&[m.home_team,m.away_team].every(team=>(counts.get(m.league+'|'+new Date(m.starts_at).toISOString().slice(0,10)+'|'+team.trim().toLowerCase())||0)===1));
   const history=all.filter(m=>m.status==='finished'&&Number.isInteger(m.home_score)&&Number.isInteger(m.away_score));
+  // Public historical result fallback, read-only. Only final 90-minute scores.
+  const season=new Date().getUTCMonth()>=6?new Date().getUTCFullYear():new Date().getUTCFullYear()-1;
+  const leagueCodes=[['bl1','Bundesliga'],['bl2','2. Bundesliga'],['bl3','3. Liga']];
+  let historySource='supabase',historyFetchStatus=[];
+  if(history.length===0){
+   const feeds=await Promise.all(leagueCodes.flatMap(([code,league])=>[season-1,season].map(async year=>{
+    try{
+     const response=await fetch('https://api.openligadb.de/getmatchdata/'+code+'/'+year,{signal:AbortSignal.timeout(8000)});
+     if(!response.ok)throw Error('HTTP '+response.status);
+     const data=await response.json();if(!Array.isArray(data))throw Error('invalid_response');
+     const rows=data.filter(m=>m.matchIsFinished&&m.team1?.teamName&&m.team2?.teamName&&m.matchDateTimeUTC).map(m=>{
+      const score=(m.matchResults||[]).find(x=>x.resultTypeID===2||x.resultTypeKind==='After90Minutes');
+      if(!score||!Number.isInteger(score.pointsTeam1)||!Number.isInteger(score.pointsTeam2))return null;
+      return {id:'openliga-'+code+'-'+m.matchID,provider:'openligadb',league,home_team:m.team1.teamName,away_team:m.team2.teamName,starts_at:new Date(m.matchDateTimeUTC).toISOString(),status:'finished',home_score:score.pointsTeam1,away_score:score.pointsTeam2};
+     }).filter(Boolean);
+     return {league,year,ok:true,rows};
+    }catch(e){return {league,year,ok:false,rows:[]}}
+   })));
+   historyFetchStatus=feeds.map(x=>({league:x.league,season:x.year,ok:x.ok,count:x.rows.length}));
+   history.push(...feeds.flatMap(x=>x.rows));
+   historySource='openligadb_read_only';
+  }
   // Read-only diagnostics: distinguish missing finished rows from insufficient team history.
   const historyByLeague=history.reduce((acc,m)=>(acc[m.league]=(acc[m.league]||0)+1,acc),{});
 
@@ -118,6 +140,6 @@ module.exports = async function handler(req,res){
    const ranked=[{selection:'1',probability:home/total},{selection:'X',probability:draw/total},{selection:'2',probability:away/total}].sort((a,b)=>b.probability-a.probability);
    return {...baseInfo,status:'model_ready',confidence,model_favorite:ranked[0].selection,model_favorite_probability:+ranked[0].probability.toFixed(4),fair_odds:{home:+(total/home).toFixed(2),draw:+(total/draw).toFixed(2),away:+(total/away).toFixed(2)},expected_goals:{home:+homeLambda.toFixed(2),away:+awayLambda.toFixed(2)},goal_markets:{over_2_5:+(over25/total).toFixed(4),under_2_5:+(1-over25/total).toFixed(4),both_teams_score_yes:+(btts/total).toFixed(4),both_teams_score_no:+(1-btts/total).toFixed(4)},probabilities:{home:+(home/total).toFixed(4),draw:+(draw/total).toFixed(4),away:+(away/total).toFixed(4)}};
   });
-  return res.status(200).json({ok:true,model:'poisson_form_blend_v1_2',disclaimer:'Experimental model, not calibrated; fair odds are model-derived, not bookmaker odds; no value assessment; no bets placed or tips published.',completed_matches:history.length,history_by_league:historyByLeague,model_ready:predictions.filter(p=>p.status==='model_ready').length,insufficient_data:predictions.filter(p=>p.status==='insufficient_data').length,upcoming_analyzed:predictions.length,fixtures_excluded:upcoming.length-validUpcoming.length,fixture_validation:'provider_and_same_day_conflicts_only',predictions});
+  return res.status(200).json({ok:true,model:'poisson_form_blend_v1_2',disclaimer:'Experimental model, not calibrated; fair odds are model-derived, not bookmaker odds; no value assessment; no bets placed or tips published.',completed_matches:history.length,history_source:historySource,history_fetch_status:historyFetchStatus,history_by_league:historyByLeague,model_ready:predictions.filter(p=>p.status==='model_ready').length,insufficient_data:predictions.filter(p=>p.status==='insufficient_data').length,upcoming_analyzed:predictions.length,fixtures_excluded:upcoming.length-validUpcoming.length,fixture_validation:'provider_and_same_day_conflicts_only',predictions});
  }catch(e){return res.status(502).json({error:'analysis_failed',detail:String(e.message||e)})}
 };
