@@ -69,7 +69,7 @@ module.exports = async function handler(req,res){
  const key=process.env.SUPABASE_SERVICE_ROLE_KEY||process.env.SUPABASE_ANON_KEY||process.env.SUPABASE_PUBLISHABLE_KEY||process.env.SPORTIQ_STATS_ANON_KEY;
  if(!base||!key)return res.status(503).json({error:'missing_supabase_configuration',diagnostic_version:'sportiq-model-2',missing:[!base?'url':null,!key?'key':null].filter(Boolean)});
  try{
-  const response=await fetch(base+'/rest/v1/sportvyn_matches?select=id,provider,league,home_team,away_team,starts_at,status,home_score,away_score&sport=eq.football&league=in.(Bundesliga,2.%20Bundesliga,Premier%20League,La%20Liga)&order=starts_at.asc&limit=1500',{headers:{apikey:key,Authorization:'Bearer '+key},signal:AbortSignal.timeout(12000)});
+  const response=await fetch(base+'/rest/v1/sportvyn_matches?select=id,provider,league,home_team,away_team,starts_at,status,home_score,away_score&sport=eq.football&league=in.(Bundesliga,2.%20Bundesliga,3.%20Liga,Premier%20League,La%20Liga)&order=starts_at.asc&limit=1500',{headers:{apikey:key,Authorization:'Bearer '+key},signal:AbortSignal.timeout(12000)});
   if(!response.ok)throw Error('database_http_'+response.status);
   const all=await response.json(),now=Date.now();
   const upcoming=all.filter(m=>m.status==='scheduled'&&Date.parse(m.starts_at)>now).slice(0,100);
