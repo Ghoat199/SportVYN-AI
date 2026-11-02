@@ -81,6 +81,9 @@ module.exports = async function handler(req,res){
   }
   const validUpcoming=upcoming.filter(m=>m.provider==='openligadb'&&m.league&&m.home_team&&m.away_team&&m.home_team.trim().toLowerCase()!==m.away_team.trim().toLowerCase()&&[m.home_team,m.away_team].every(team=>(counts.get(m.league+'|'+new Date(m.starts_at).toISOString().slice(0,10)+'|'+team.trim().toLowerCase())||0)===1));
   const history=all.filter(m=>m.status==='finished'&&Number.isInteger(m.home_score)&&Number.isInteger(m.away_score));
+  // Read-only diagnostics: distinguish missing finished rows from insufficient team history.
+  const historyByLeague=history.reduce((acc,m)=>(acc[m.league]=(acc[m.league]||0)+1,acc),{});
+
   // V1.2: use recent overall form alongside venue-specific form; shrink small samples.
   function rate(team,home,cutoff,league){
    const matches=history.filter(m=>m.league===league&&Date.parse(m.starts_at)<cutoff&&(m.home_team===team||m.away_team===team)).sort((x,y)=>Date.parse(y.starts_at)-Date.parse(x.starts_at));
@@ -115,6 +118,6 @@ module.exports = async function handler(req,res){
    const ranked=[{selection:'1',probability:home/total},{selection:'X',probability:draw/total},{selection:'2',probability:away/total}].sort((a,b)=>b.probability-a.probability);
    return {...baseInfo,status:'model_ready',confidence,model_favorite:ranked[0].selection,model_favorite_probability:+ranked[0].probability.toFixed(4),fair_odds:{home:+(total/home).toFixed(2),draw:+(total/draw).toFixed(2),away:+(total/away).toFixed(2)},expected_goals:{home:+homeLambda.toFixed(2),away:+awayLambda.toFixed(2)},goal_markets:{over_2_5:+(over25/total).toFixed(4),under_2_5:+(1-over25/total).toFixed(4),both_teams_score_yes:+(btts/total).toFixed(4),both_teams_score_no:+(1-btts/total).toFixed(4)},probabilities:{home:+(home/total).toFixed(4),draw:+(draw/total).toFixed(4),away:+(away/total).toFixed(4)}};
   });
-  return res.status(200).json({ok:true,model:'poisson_form_blend_v1_2',disclaimer:'Experimental model, not calibrated; fair odds are model-derived, not bookmaker odds; no value assessment; no bets placed or tips published.',completed_matches:history.length,upcoming_analyzed:predictions.length,fixtures_excluded:upcoming.length-validUpcoming.length,fixture_validation:'provider_and_same_day_conflicts_only',predictions});
+  return res.status(200).json({ok:true,model:'poisson_form_blend_v1_2',disclaimer:'Experimental model, not calibrated; fair odds are model-derived, not bookmaker odds; no value assessment; no bets placed or tips published.',completed_matches:history.length,history_by_league:historyByLeague,model_ready:predictions.filter(p=>p.status==='model_ready').length,insufficient_data:predictions.filter(p=>p.status==='insufficient_data').length,upcoming_analyzed:predictions.length,fixtures_excluded:upcoming.length-validUpcoming.length,fixture_validation:'provider_and_same_day_conflicts_only',predictions});
  }catch(e){return res.status(502).json({error:'analysis_failed',detail:String(e.message||e)})}
 };
