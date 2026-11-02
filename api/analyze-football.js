@@ -1,7 +1,7 @@
 async function backtestHandler(req,res){
  if(req.method!=='GET')return res.status(405).json({error:'method_not_allowed'});
- const base=(process.env.SUPABASE_URL||'').replace(/\/+$/,'').replace(/\/rest\/v1$/,'');
- const key=process.env.SUPABASE_SERVICE_ROLE_KEY;
+ const base=(process.env.SUPABASE_URL||process.env.SPORTIQ_STATS_SUPABASE_URL||'').replace(/\/+$/,'').replace(/\/rest\/v1$/,'');
+ const key=process.env.SUPABASE_SERVICE_ROLE_KEY||process.env.SUPABASE_ANON_KEY||process.env.SUPABASE_PUBLISHABLE_KEY||process.env.SPORTIQ_STATS_ANON_KEY;
  if(!base||!key)return res.status(503).json({error:'missing_configuration'});
  try{
   const q=new URLSearchParams({select:'id,league,home_team,away_team,starts_at,status,home_score,away_score',sport:'eq.football',status:'eq.finished',order:'starts_at.asc',limit:'3000'});
@@ -65,9 +65,9 @@ async function backtestHandler(req,res){
 module.exports = async function handler(req,res){
  if(req.query?.mode==='backtest')return backtestHandler(req,res);
  if(req.method!=='GET')return res.status(405).json({error:'method_not_allowed'});
- const base=(process.env.SUPABASE_URL||'').replace(/\/+$/,'').replace(/\/rest\/v1$/,'');
- const key=process.env.SUPABASE_SERVICE_ROLE_KEY;
- if(!base||!key)return res.status(503).json({error:'missing_supabase_configuration'});
+ const base=(process.env.SUPABASE_URL||process.env.SPORTIQ_STATS_SUPABASE_URL||'').replace(/\/+$/,'').replace(/\/rest\/v1$/,'');
+ const key=process.env.SUPABASE_SERVICE_ROLE_KEY||process.env.SUPABASE_ANON_KEY||process.env.SUPABASE_PUBLISHABLE_KEY||process.env.SPORTIQ_STATS_ANON_KEY;
+ if(!base||!key)return res.status(503).json({error:'missing_supabase_configuration',diagnostic_version:'sportiq-model-2',missing:[!base?'url':null,!key?'key':null].filter(Boolean)});
  try{
   const response=await fetch(base+'/rest/v1/sportvyn_matches?select=id,provider,league,home_team,away_team,starts_at,status,home_score,away_score&sport=eq.football&league=in.(Bundesliga,2.%20Bundesliga,Premier%20League,La%20Liga)&order=starts_at.asc&limit=1500',{headers:{apikey:key,Authorization:'Bearer '+key},signal:AbortSignal.timeout(12000)});
   if(!response.ok)throw Error('database_http_'+response.status);
