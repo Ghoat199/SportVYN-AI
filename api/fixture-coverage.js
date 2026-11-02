@@ -3,7 +3,7 @@ const publishedPredictionsHandler = async function publishedPredictionsHandler(r
   if (req.method !== 'GET') return res.status(405).json({ error: 'method_not_allowed' });
   const base = (process.env.SUPABASE_URL || process.env.SPORTIQ_STATS_SUPABASE_URL || '').replace(/\/+$/, '').replace(/\/rest\/v1$/, '');
   const key = process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_PUBLISHABLE_KEY || process.env.SPORTIQ_STATS_ANON_KEY;
-  if (!base || !key) return res.status(503).json({ error: 'public_feed_not_configured' });
+  if (!base || !key) return res.status(503).json({ error: 'public_feed_not_configured', diagnostic_version: 'sportiq-feed-2', missing: [!base ? 'url' : null, !key ? 'public_key' : null].filter(Boolean), environment: process.env.VERCEL_ENV || 'unknown' });
   const headers = { apikey: key, Authorization: 'Bearer ' + key, Accept: 'application/json' };
   async function read(path) {
     const r = await fetch(base + '/rest/v1/' + path, { headers, signal: AbortSignal.timeout(8000) });
