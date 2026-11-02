@@ -452,14 +452,44 @@ loadUefa();
   }
   const games=data.games.filter(g=>g&&typeof g.match==='string'&&Number.isFinite(Date.parse(g.starts_at))&&Date.parse(g.starts_at)>Date.now()).sort((a,b)=>Date.parse(a.starts_at)-Date.parse(b.starts_at));
   status.textContent=games.length?games.length+' bevorstehende Spiele · Quelle: '+(data.source||'importierter Spielplan')+' · Stand: '+new Date(data.checked_at||Date.now()).toLocaleString('de-DE',{timeZone:'Europe/Berlin'}):'Aktuell keine bevorstehenden importierten Spiele vorhanden. Der Spielplan ist nicht automatisch ein Tipp.';
+  let modelPredictions=[],modelError=false;
+  try{
+   const response=await fetch('/api/analyze-football',{cache:'no-store'});
+   if(!response.ok)throw Error('model_http_'+response.status);
+   const model=await response.json();
+   if(!model.ok||!Array.isArray(model.predictions))throw Error('invalid_model_response');
+   modelPredictions=model.predictions;
+  }catch(e){modelError=true}
+  const normalize=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');
+  const matchKey=s=>String(s||'').split(/\\s+[–—-]\\s+/).map(normalize).join('|');
+  const percent=n=>(Number(n)*100).toLocaleString('de-DE',{maximumFractionDigits:1})+' %';
+  let connected=0;
   for(const g of games.slice(0,60)){
    const card=document.createElement('article');card.className='card';
    const title=document.createElement('h3');title.textContent=g.match;card.append(title);
    const meta=document.createElement('p');meta.textContent=[g.league,new Date(g.starts_at).toLocaleString('de-DE',{dateStyle:'medium',timeStyle:'short',timeZone:'Europe/Berlin'})].filter(Boolean).join(' · ');card.append(meta);
    const verified=['independent_sample_match','matches_import_source'].includes(g.verification_status)&&g.validation_status!=='review_required';
    const note=document.createElement('p');note.className='muted';note.textContent=verified?'Spielplan mit Quelle abgeglichen · keine Tippempfehlung':'Spieltermin nicht unabhängig bestätigt · keine Tippempfehlung';card.append(note);
+   const model=modelPredictions.find(p=>p.status==='model_ready'&&p.probabilities&&p.league===g.league&&matchKey(p.match)===matchKey(g.match)&&Math.abs(Date.parse(p.starts_at)-Date.parse(g.starts_at))<=15*60000);
+   const modelNote=document.createElement('p');modelNote.className='muted';
+   if(model){
+    connected++;
+    const probs=model.probabilities;
+    modelNote.textContent='Experimentelles 1X2-Modell: Heimsieg '+percent(probs.home)+' · Remis '+percent(probs.draw)+' · Auswärtssieg '+percent(probs.away);
+    card.append(modelNote);
+    if(model.goal_markets){
+     const markets=document.createElement('p');markets.className='muted';
+     markets.textContent='Beide treffen: Ja '+percent(model.goal_markets.both_teams_score_yes)+' · Über 2,5 Tore '+percent(model.goal_markets.over_2_5);
+     card.append(markets);
+    }
+    const disclaimer=document.createElement('p');disclaimer.className='muted';disclaimer.textContent='Modell-Testwerte, keine geprüften Value-Tipps oder Buchmacherquoten.';card.append(disclaimer);
+   }else{
+    modelNote.textContent=modelError?'Modellanalyse derzeit nicht erreichbar.':'Für diese Spielansetzung noch keine passende, ausreichend datenbasierte Modellprognose.';
+    card.append(modelNote);
+   }
    container.append(card);
   }
+  status.textContent+=' · '+connected+' passende Modellprognosen'+(modelError?' · Modellservice nicht erreichbar':'');
  }catch(e){status.textContent='Der importierte Spielplan ist derzeit nicht erreichbar. Bitte später erneut versuchen.';}
 })();
 </script></body></html>
