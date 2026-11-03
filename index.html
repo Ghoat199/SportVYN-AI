@@ -1,4 +1,4 @@
-<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SPORTIQ AI – Heutige Analysen</title><style>:root{font-family:system-ui,Arial,sans-serif;background:#081622;color:#edf5f8}*{box-sizing:border-box}body{margin:0}header,main,footer{max-width:850px;margin:auto;padding:22px}header{border-bottom:1px solid #2a4050;display:flex;justify-content:space-between;align-items:center}h1{font-size:28px;margin:0}h1 span{color:#69e4af}h2{font-size:24px}p{line-height:1.5}.muted{color:#abc0ca}.card{background:#112837;border:1px solid #2a4757;border-radius:16px;padding:22px;margin:15px 0}.tip{font-size:23px;font-weight:800;color:#76edb8;margin:12px 0}.percent{font-size:16px;color:#fff}.meta{color:#b9ced8;font-size:14px}.badge{font-size:12px;border:1px solid #456777;border-radius:30px;padding:5px 10px}.filters{display:flex;gap:8px;flex-wrap:wrap;margin:18px 0}button{background:#18394a;color:#eaf5f8;border:1px solid #406174;padding:10px 14px;border-radius:9px;cursor:pointer}button.active{background:#6be7b2;color:#06241c;font-weight:700}.note{border-left:3px solid #6be7b2;padding-left:13px;color:#bed1da}.empty{padding:30px;background:#112837;border-radius:14px}footer{font-size:13px;color:#a6bbc6}@media(max-width:600px){header,main,footer{padding:16px}h1{font-size:23px}}</style></head><body><header><h1>SPORTIQ <span>AI</span></h1><span class="badge">Sportanalysen</span></header><main><h2>Spiele heute</h2><p class="muted">Automatische Analyse statt unübersichtlicher Tabellen. Ein Vorschlag nur, wenn genügend Spieldaten vorliegen.</p><div class="filters" id="filters"><button class="active" data-filter="today">Heute</button><button data-filter="tomorrow">Morgen</button><button data-filter="week">Nächste 7 Tage</button></div><p id="status" class="muted">Spiele und Modell werden geladen …</p><div id="games"></div><p class="note">Experimentelle Wahrscheinlichkeiten, keine garantierten Ergebnisse. Ohne belastbare Analyse gibt SPORTIQ keinen Tipp aus. Buchmacherquoten und ein nachgewiesener Wettvorteil liegen derzeit nicht vor.</p></main><footer>SPORTIQ AI · Datenbasierte Modellvorschläge, keine automatischen Wetten.</footer><script>
+<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SPORTIQ AI – Heutige Analysen</title><style>:root{font-family:system-ui,Arial,sans-serif;background:#081622;color:#edf5f8}*{box-sizing:border-box}body{margin:0}header,main,footer{max-width:850px;margin:auto;padding:22px}header{border-bottom:1px solid #2a4050;display:flex;justify-content:space-between;align-items:center}h1{font-size:28px;margin:0}h1 span{color:#69e4af}h2{font-size:24px}p{line-height:1.5}.muted{color:#abc0ca}.card{background:#112837;border:1px solid #2a4757;border-radius:16px;padding:22px;margin:15px 0}.tip{font-size:23px;font-weight:800;color:#76edb8;margin:12px 0}.percent{font-size:16px;color:#fff}.meta{color:#b9ced8;font-size:14px}.badge{font-size:12px;border:1px solid #456777;border-radius:30px;padding:5px 10px}.filters{display:flex;gap:8px;flex-wrap:wrap;margin:18px 0}button{background:#18394a;color:#eaf5f8;border:1px solid #406174;padding:10px 14px;border-radius:9px;cursor:pointer}button.active{background:#6be7b2;color:#06241c;font-weight:700}.note{border-left:3px solid #6be7b2;padding-left:13px;color:#bed1da}.empty{padding:30px;background:#112837;border-radius:14px}footer{font-size:13px;color:#a6bbc6}@media(max-width:600px){header,main,footer{padding:16px}h1{font-size:23px}}</style></head><body><header><h1>SPORTIQ <span>AI</span></h1><span class="badge">Sportanalysen</span></header><main><h2>Spiele heute</h2><p class="muted">Automatische Analyse statt unübersichtlicher Tabellen. Ein Vorschlag nur, wenn genügend Spieldaten vorliegen.</p><div class="filters" id="filters"><button class="active" data-filter="today">Heute</button><button data-filter="tomorrow">Morgen</button><button data-filter="week">Nächste 7 Tage</button></div><p id="status" class="muted">Spiele und Modell werden geladen …</p><div id="games"></div><p class="note">Experimentelle Wahrscheinlichkeiten, keine garantierten Ergebnisse. Ohne belastbare Analyse gibt SPORTIQ keinen Tipp aus. Buchmacherquoten werden nur bei verbundenem Datenanbieter verglichen. Ein tatsächlicher Wettvorteil ist nicht nachgewiesen.</p></main><footer>SPORTIQ AI · Datenbasierte Modellvorschläge, keine automatischen Wetten.</footer><script>
 let selected='today',predictions=[];
 const out=document.getElementById('games'),status=document.getElementById('status');
 const day=d=>new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Berlin',year:'numeric',month:'2-digit',day:'2-digit'}).format(d);
@@ -16,29 +16,11 @@ function render(){
   let content='<div class="meta">'+esc(p.league)+' · '+esc(t)+'</div><h3>'+esc(p.match)+'</h3>';
   if(p.status!=='model_ready'){content+='<p class="muted">Kein Tipp – für dieses Spiel fehlen ausreichend historische Daten.</p>'}
   else{
-   const g=p.expected_goals||{},total=Number(g.home)+Number(g.away);
-   // Compare informative markets, rather than always selecting the broadest goal line.
-   // Probabilities are experimental and not bookmaker value estimates.
-   const pr=p.probabilities||{},gm=p.goal_markets||{};
-   const choices=[
-    {name:'Über 2,5 Tore',prob:gm.over_2_5,reason:'Erwartete Torverteilung'},
-    {name:'Unter 2,5 Tore',prob:gm.under_2_5,reason:'Erwartete Torverteilung'},
-    {name:'Beide Teams treffen: Ja',prob:gm.both_teams_score_yes,reason:'Torwahrscheinlichkeiten beider Teams'},
-    {name:'Beide Teams treffen: Nein',prob:gm.both_teams_score_no,reason:'Torwahrscheinlichkeiten beider Teams'},
-    {name:'Heimsieg',prob:pr.home,reason:'Heim- und Auswärtsform'},
-    {name:'Unentschieden',prob:pr.draw,reason:'Ausgeglichene Torerwartung'},
-    {name:'Auswärtssieg',prob:pr.away,reason:'Heim- und Auswärtsform'},
-    {name:'Doppelte Chance 1X',prob:Number.isFinite(pr.home)&&Number.isFinite(pr.draw)?pr.home+pr.draw:NaN,reason:'Heimvorteil und Remis-Wahrscheinlichkeit'},
-    {name:'Doppelte Chance X2',prob:Number.isFinite(pr.away)&&Number.isFinite(pr.draw)?pr.away+pr.draw:NaN,reason:'Auswärtsform und Remis-Wahrscheinlichkeit'}
-   ].filter(x=>typeof x.prob==='number'&&Number.isFinite(x.prob)&&x.prob>=0&&x.prob<=1);
-   // Require a meaningful model signal; broad Over 1.5 is not a default recommendation.
-   const ranked=choices.filter(x=>x.prob>=.68).sort((a,b)=>b.prob-a.prob);
-   const best=p.confidence==='moderate'?ranked[0]:null;
-   // Model feed validates provider conflicts, but not independent fixture existence.
-   // Without independent fixture confirmation or calibrated probabilities, do not label a betting recommendation.
-   if(best){
-    content+='<div class="meta">KI-Modellvorschlag · keine geprüfte Wette</div><div class="tip">'+esc(best.name)+' <span class="percent">'+pct(best.prob)+'</span></div><p><strong>Analyse:</strong> '+esc(best.reason)+'. Erwartete Tore: '+(Number.isFinite(Number(g.home))?Number(g.home).toFixed(2):'–')+' : '+(Number.isFinite(Number(g.away))?Number(g.away).toFixed(2):'–')+'.</p><p class="muted">Spieltermin noch unabhängig zu bestätigen. Modellwerte sind nicht kalibriert; keine Quotenprüfung.</p>';
-   }else content+='<p class="muted">Kein Tipp – kein ausreichend klares oder belastbares Modellsignal.</p>';
+   const pick=p.value_pick;
+   if(pick&&Number.isFinite(pick.probability)&&Number.isFinite(pick.odds)&&Number.isFinite(pick.edge)){
+    content+='<div class="meta">Quotenvergleich · '+esc(pick.bookmaker)+'</div><div class="tip">'+esc(pick.market)+' <span class="percent">'+pct(pick.probability)+'</span></div><p>Quote: <strong>'+Number(pick.odds).toFixed(2)+'</strong> · Modell-Erwartungswert: <strong>+'+pct(pick.edge)+'</strong></p><p class="muted">Rechnerischer Modellvorteil, nicht nachgewiesener Wettvorteil. Spiel und Quote vor einer Wette prüfen.</p>';
+   }else content+='<p class="muted">Kein geeigneter Tipp – keine vergleichbare aktuelle Quote oder kein ausreichender Modellvorteil.</p>';
+
   }
   card.innerHTML=content;out.append(card);
  }
