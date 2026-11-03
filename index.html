@@ -7,8 +7,8 @@ const esc=s=>String(s??'').replace(/[&<>"']/g,x=>({'&':'&amp;','<':'&lt;','>':'&
 const pct=n=>(n*100).toLocaleString('de-DE',{maximumFractionDigits:1})+' %';
 function render(){
  out.replaceChildren();const now=Date.now(),today=offset(0),tomorrow=offset(1);
- const items=predictions.filter(p=>{const t=Date.parse(p.starts_at);if(!Number.isFinite(t)||t<now-90*60000)return false;const d=day(new Date(t));return selected==='today'?d===today:selected==='tomorrow'?d===tomorrow:t<now+7*86400000}).sort((a,b)=>Date.parse(a.starts_at)-Date.parse(b.starts_at));
- status.textContent=items.length+' Spiele · SPORTIQ-Modellanalyse';
+ let items=predictions.filter(p=>{const t=Date.parse(p.starts_at);if(!Number.isFinite(t)||t<now-90*60000)return false;const d=day(new Date(t));return selected==='today'?d===today:selected==='tomorrow'?d===tomorrow:t<now+7*86400000}).sort((a,b)=>Date.parse(a.starts_at)-Date.parse(b.starts_at));
+ if(!items.length&&selected==='today'){items=predictions.filter(p=>{const t=Date.parse(p.starts_at);return Number.isFinite(t)&&t>=now-90*60000&&t<now+7*86400000}).sort((a,b)=>Date.parse(a.starts_at)-Date.parse(b.starts_at));status.textContent=items.length?'Heute keine Spiele · Nächste Spiele der kommenden 7 Tage':'Heute keine Spiele · Auch keine weiteren Spiele im Modell'}else{status.textContent=items.length+' Spiele · SPORTIQ-Modellanalyse'}
  if(!items.length){out.innerHTML='<div class="empty">Für diesen Zeitraum liegen derzeit keine Spiele in der SPORTIQ-Analyse vor.</div>';return}
  for(const p of items.slice(0,50)){
   const card=document.createElement('article');card.className='card';
