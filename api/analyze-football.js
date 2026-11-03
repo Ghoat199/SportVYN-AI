@@ -58,7 +58,51 @@ async function backtestHandler(req,res){
    results.push({league,...summarize(eligible),holdout:summarize(holdout)});
   }
   res.setHeader('Cache-Control','no-store, max-age=0');res.setHeader('X-Sportiq-Model','poisson_league_relative_shrunk_v1_3');
-  return res.status(200).json({ok:true,model:'poisson_league_relative_shrunk_v1_3',method:'chronological_walk_forward_no_future_results',history_source:'openligadb_read_only',history_fetch_status:feeds.map(x=>({league:x.league,season:x.year,ok:x.ok,count:x.rows.length,error:x.error})),completed_matches:feeds.reduce((s,x)=>s+x.rows.length,0),note:'Historical diagnostic, not proof of betting edge. Holdout is final 30% of eligible matches. Lower Brier score is better; baseline uses prior league outcome frequencies.',leagues:results});
+  // Optional read-only bookmaker odds via The Odds API. Never invent unavailable prices.
+  // Configure ODDS_API_KEY in Vercel; no new serverless function is required.
+  const oddsKey=process.env.ODDS_API_KEY;
+  let oddsStatus=oddsKey?'unavailable':'not_configured';
+  if(oddsKey){
+   try{
+    const sports=[['soccer_epl','Premier League'],['soccer_spain_la_liga','La Liga']];
+    const feeds=await Promise.all(sports.map(async([code,league])=>{
+     const url='https://api.the-odds-api.com/v4/sports/'+code+'/odds/?'+new URLSearchParams({apiKey:oddsKey,regions:'eu',markets:'h2h,totals',oddsFormat:'decimal'});
+     const response=await fetch(url,{signal:AbortSignal.timeout(6500)});
+     if(!response.ok)throw Error('odds_http_'+response.status);
+     return {league,events:await response.json()};
+    }));
+    let matched=0;
+    for(const p of predictions){
+     if(p.status!=='model_ready'||p.confidence!=='moderate')continue;
+     const [home,away]=p.match.split(' – ');
+     const feed=feeds.find(f=>f.league===p.league);if(!feed)continue;
+     const event=feed.events.find(e=>sameTeam(e.home_team,home)&&sameTeam(e.away_team,away)&&Math.abs(Date.parse(e.commence_time)-Date.parse(p.starts_at))<90*60000);
+     if(!event)continue;
+     matched++;
+     const options=[];
+     for(const book of event.bookmakers||[])for(const market of book.markets||[])for(const o of market.outcomes||[]){
+      let probability=null,label=null;
+      if(market.key==='h2h'){
+       if(sameTeam(o.name,home)){probability=p.probabilities.home;label='Heimsieg'}
+       else if(sameTeam(o.name,away)){probability=p.probabilities.away;label='Auswärtssieg'}
+       else if(o.name==='Draw'){probability=p.probabilities.draw;label='Unentschieden'}
+      }else if(market.key==='totals'&&Number(o.point)===2.5){
+       if(o.name==='Over'){probability=p.goal_markets.over_2_5;label='Über 2,5 Tore'}
+       if(o.name==='Under'){probability=p.goal_markets.under_2_5;label='Unter 2,5 Tore'}
+      }
+      const price=Number(o.price);
+      if(label&&Number.isFinite(probability)&&price>1&&price<100){
+       const edge=probability*price-1;
+       if(edge>=.05)options.push({market:label,probability,odds:price,edge,bookmaker:book.title});
+      }
+     }
+     options.sort((a,b)=>b.edge-a.edge);
+     if(options.length)p.value_pick=options[0];
+    }
+    oddsStatus='ok_'+matched+'_fixtures_matched';
+   }catch(e){oddsStatus='provider_unavailable'}
+  }
+  return res.status(200).json({ok:true,odds_status:oddsStatus,model:'poisson_league_relative_shrunk_v1_3',method:'chronological_walk_forward_no_future_results',history_source:'openligadb_read_only',history_fetch_status:feeds.map(x=>({league:x.league,season:x.year,ok:x.ok,count:x.rows.length,error:x.error})),completed_matches:feeds.reduce((s,x)=>s+x.rows.length,0),note:'Historical diagnostic, not proof of betting edge. Holdout is final 30% of eligible matches. Lower Brier score is better; baseline uses prior league outcome frequencies.',leagues:results});
  }catch(e){return res.status(502).json({error:'backtest_failed',detail:String(e.message||e)})}
 };
 // SportVYN AI: transparent, deterministic league-separated multi-league baseline model.
